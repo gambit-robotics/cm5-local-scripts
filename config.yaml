@@ -1,0 +1,22 @@
+# Gambit Safety Scripts Configuration
+# This file should be installed to /etc/gambit/safety-config.yaml
+
+pct2075:
+  i2c_address: 0x37
+  warning_temp_c: 70
+  shutdown_temp_c: 80
+  poll_interval_s: 5
+
+mcp9601:
+  i2c_address: 0x67
+  thermocouple_type: K  # K, J, T, N, S, E, B, or R
+  warning_temp_c: 60
+  shutdown_temp_c: 75
+  poll_interval_s: 5
+
+ina219:
+  i2c_address: 0x42
+  warning_battery_percent: 15
+  shutdown_battery_percent: 5
+  poll_interval_s: 10
+  battery_cell_count: 3  # 3S LiPo pack (supports 1-6)

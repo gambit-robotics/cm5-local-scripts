@@ -1,0 +1,29 @@
+[Unit]
+Description=INA219 UPS Battery Safety Monitor
+Documentation=https://github.com/gambit-robotics/gambit-safety-scripts
+After=local-fs.target sysinit.target
+Wants=local-fs.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/gambit/safety/ina219_safety.py
+Restart=on-failure
+RestartSec=5
+SuccessExitStatus=1
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ina219-safety
+
+# Run as root for shutdown command and I2C access
+User=root
+Group=root
+
+# Hardening (relaxed for I2C/GPIO access via /sys and /dev)
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
