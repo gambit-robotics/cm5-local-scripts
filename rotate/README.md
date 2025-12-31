@@ -86,60 +86,7 @@ libinput list-devices | grep -A1 "Touch"
 sudo reboot
 ```
 
----
-
-## Installation via SSH (Shell-Only Access)
-
-If you only have SSH shell access (e.g., via `viam machine part shell` or similar) and cannot transfer files directly, use the base64 encoding method:
-
-### 1. On your local machine, encode the script:
-
-```bash
-base64 -i setup-autorotate.sh
-```
-
-### 2. On the Raspberry Pi, create and decode the file:
-
-```bash
-cat > /home/<username>/setup-autorotate.sh <<'ENDBASE64'
-<paste base64 output here>
-ENDBASE64
-base64 -d /home/<username>/setup-autorotate.sh > /home/<username>/setup-autorotate.sh.decoded && mv /home/<username>/setup-autorotate.sh.decoded /home/<username>/setup-autorotate.sh
-chmod +x /home/<username>/setup-autorotate.sh
-```
-
-### 3. Verify the script decoded correctly:
-
-```bash
-head -5 /home/<username>/setup-autorotate.sh
-```
-
-You should see:
-```
-#!/bin/bash
-set -euo pipefail
-
-# Auto-rotate display + touch (0°/180°) using LIS3DH on Raspberry Pi OS Bookworm
-```
-
-### 4. Run the setup script:
-
-```bash
-sudo /home/<username>/setup-autorotate.sh <username> <display-output> [touch-device-name]
-```
-
-### 5. Start the service (optional - no reboot needed):
-
-```bash
-sudo -u <username> XDG_RUNTIME_DIR=/run/user/$(id -u <username>) systemctl --user start autorotate.service
-```
-
-Or reboot to activate:
-```bash
-sudo reboot
-```
-
-**Note:** Replace `<username>` with your actual username (e.g., `tpastore`, `pi`).
+See [root README](../README.md#deployment-via-base64) for base64 deployment method.
 
 ---
 

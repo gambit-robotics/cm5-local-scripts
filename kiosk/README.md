@@ -180,31 +180,6 @@ Edit `~/start-kiosk.sh` to change:
 
 ---
 
-## Installation via SSH (Shell-Only Access)
+## Deployment
 
-If you only have SSH shell access (e.g., via `viam machine part shell` or similar), use the base64 encoding method:
-
-### 1. On your local machine, encode the script:
-
-```bash
-base64 -i setup-kiosk-wayland.sh
-```
-
-### 2. On the Raspberry Pi, decode and create the file:
-
-```bash
-echo '<paste base64 output here>' | base64 -d > ~/setup-kiosk-wayland.sh
-chmod +x ~/setup-kiosk-wayland.sh
-```
-
-### 3. Run the setup:
-
-```bash
-sudo ~/setup-kiosk-wayland.sh <username>
-```
-
----
-
-## License
-
-MIT
+See [root README](../README.md#deployment-via-base64) for base64 deployment method.

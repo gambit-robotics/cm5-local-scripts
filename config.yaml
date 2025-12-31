@@ -7,8 +7,8 @@ pct2075:
   shutdown_temp_c: 80
   poll_interval_s: 5
 
-mcp9601:
-  i2c_address: 0x67
+# mcp9601: disabled due to issues with hardware
+  # i2c_address: 0x67 using 0x67 for the buttons
   thermocouple_type: K  # K, J, T, N, S, E, B, or R
   warning_temp_c: 60
   shutdown_temp_c: 75

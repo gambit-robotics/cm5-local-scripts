@@ -33,7 +33,7 @@ python3 ups_benchmark.py cyclic --cycle-duration 60 --threshold 10
 ## Options
 
 | Option | Default | Description |
-|--------|---------|-------------|
+|--------|---------|-------------| 
 | `--threshold PCT` | 10 | Stop at this battery % |
 | `--interval SEC` | 1.0 | Logging interval in seconds |
 | `--output DIR` | `.` | CSV output directory |

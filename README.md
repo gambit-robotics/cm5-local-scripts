@@ -1,43 +1,148 @@
 # Gambit Safety Scripts
 
-Standalone systemd services that monitor hardware sensors via I2C and trigger graceful shutdown when safety thresholds are exceeded. These scripts run independently of Viam - if viam-server crashes, safety monitoring continues.
+Raspberry Pi setup scripts and systemd services for kiosk displays, hardware monitoring, and peripheral control.
 
-## Sensors Monitored
+## Modules
+
+| Module | Purpose | Scripts |
+|--------|---------|---------|
+| [buttons/](buttons/) | I2C volume control buttons | `setup-buttons.sh` |
+| [rotate/](rotate/) | Auto-rotate display via accelerometer | `setup-autorotate.sh` |
+| [kiosk/](kiosk/) | Chromium fullscreen kiosk | `setup-kiosk-wayland.sh`, `setup-kiosk-x11.sh` |
+| [scripts/](scripts/) | Safety monitoring daemons | `pct2075_safety.py`, `mcp9601_safety.py`, `ina219_safety.py` |
+
+## Deployment via Base64
+
+Scripts are transferred to Pi via base64 encoding to avoid issues with special characters, line endings, and shell escaping.
+
+### Encode (local machine)
+
+```bash
+# macOS - copies to clipboard
+base64 < path/to/script.sh | pbcopy
+
+# Linux - print to stdout
+base64 < path/to/script.sh
+```
+
+### Decode and run (Pi via SSH)
+
+```bash
+# Decode to file
+echo 'PASTE_BASE64_HERE' | base64 -d > /tmp/script.sh
+chmod +x /tmp/script.sh
+
+# Run
+sudo /tmp/script.sh <args>
+```
+
+### One-liner
+
+```bash
+echo 'BASE64_STRING' | base64 -d | sudo bash -s <args>
+```
+
+---
+
+## Buttons
+
+I2C volume control using Arduino Modulino Buttons (ABX00110).
+
+```bash
+# Deploy
+base64 < buttons/setup-buttons.sh | pbcopy
+# On Pi:
+echo 'BASE64' | base64 -d > /tmp/setup-buttons.sh
+sudo /tmp/setup-buttons.sh <username>
+```
+
+| Button | Action |
+|--------|--------|
+| A | Volume Down |
+| B | (unused) |
+| C | Volume Up |
+
+**Config**: `~/.config/systemd/user/buttons.service`
+
+```bash
+systemctl --user status buttons
+journalctl --user -u buttons -f
+```
+
+---
+
+## Auto-Rotate
+
+Rotate display + touch (0°/180°) using LIS3DH accelerometer.
+
+```bash
+# Deploy
+base64 < rotate/setup-autorotate.sh | pbcopy
+# On Pi:
+echo 'BASE64' | base64 -d > /tmp/setup-autorotate.sh
+sudo /tmp/setup-autorotate.sh <username> <display-output> [touch-device]
+```
+
+**Find display output**: `wlr-randr`
+**Find touch device**: `libinput list-devices | grep -A1 Touch`
+
+```bash
+systemctl --user status autorotate
+journalctl --user -u autorotate -f
+```
+
+---
+
+## Kiosk
+
+Chromium fullscreen kiosk mode.
+
+```bash
+# Deploy (Wayland - Bookworm default)
+base64 < kiosk/setup-kiosk-wayland.sh | pbcopy
+# On Pi:
+echo 'BASE64' | base64 -d > /tmp/setup-kiosk.sh
+sudo /tmp/setup-kiosk.sh <username>
+```
+
+**Check display server**:
+```bash
+echo $XDG_SESSION_TYPE   # wayland or x11
+```
+
+```bash
+systemctl --user status kiosk
+journalctl --user -u kiosk -f
+```
+
+---
+
+## Safety Monitoring
+
+Standalone systemd services that monitor hardware sensors via I2C and trigger graceful shutdown when thresholds are exceeded. Runs independently of Viam.
 
 | Script | Sensor | Purpose |
 |--------|--------|---------|
-| `pct2075_safety.py` | PCT2075 | Ambient temperature monitoring |
-| `mcp9601_safety.py` | MCP9601 | Thermocouple temperature monitoring |
-| `ina219_safety.py` | INA219 | UPS battery level monitoring |
+| `pct2075_safety.py` | PCT2075 | Ambient temperature |
+| `mcp9601_safety.py` | MCP9601 | Thermocouple temperature |
+| `ina219_safety.py` | INA219 | UPS battery level |
 
-## Installation
+### Installation
 
 ```bash
 sudo ./install.sh
 ```
 
-This will:
-1. Install Python dependencies
-2. Copy scripts to `/opt/gambit/safety/`
-3. Copy config to `/etc/gambit/safety-config.yaml`
-4. Install and start systemd services
-
-## Uninstallation
-
-```bash
-sudo ./uninstall.sh
-```
-
-## Configuration
+### Configuration
 
 Edit `/etc/gambit/safety-config.yaml`:
 
 ```yaml
 pct2075:
   i2c_address: 0x37
-  warning_temp_c: 70      # Log warning at this temperature
-  shutdown_temp_c: 80     # Trigger shutdown at this temperature
-  poll_interval_s: 5      # How often to check
+  warning_temp_c: 70
+  shutdown_temp_c: 80
+  poll_interval_s: 5
 
 mcp9601:
   i2c_address: 0x67
@@ -47,94 +152,75 @@ mcp9601:
 
 ina219:
   i2c_address: 0x42
-  warning_battery_percent: 15    # Log warning at this level
-  shutdown_battery_percent: 5    # Trigger shutdown at this level
+  warning_battery_percent: 15
+  shutdown_battery_percent: 5
   poll_interval_s: 10
-  battery_cell_count: 3          # 3S LiPo pack
+  battery_cell_count: 3
 ```
-
-After editing, restart the services:
 
 ```bash
 sudo systemctl restart pct2075-safety mcp9601-safety ina219-safety
 ```
 
-## Behavior
+### Behavior
 
-Each script follows the same pattern:
+1. Poll sensor at configured interval
+2. Log readings to journald
+3. At warning threshold: log warning (once)
+4. At shutdown threshold: `shutdown -h +1 "Safety shutdown: <reason>"`
 
-1. Load config from `/etc/gambit/safety-config.yaml`
-2. Initialize I2C sensor at configured address
-3. Poll at configured interval
-4. Log readings to journald
-5. At warning threshold: log warning (once until recovered)
-6. At shutdown threshold: log critical, run `shutdown -h +1 "Safety shutdown: <reason>"`
-
-### Error Handling
-
-- If I2C read fails: log error and retry on next poll
-- After 5 consecutive failures: log critical but **do not shutdown** (hardware may be disconnected)
-- Counter resets after any successful read
-
-### Battery Monitoring (INA219)
-
-- Only triggers shutdown when **discharging** (not while charging)
-- Battery percentage calculated from voltage using linear interpolation
-- Supports 1S-6S battery packs via `battery_cell_count` config
-
-## Service Management
+**Error handling**: After 5 consecutive I2C failures, logs critical but does NOT shutdown (hardware may be disconnected).
 
 ```bash
-# Check status
 sudo systemctl status pct2075-safety
-sudo systemctl status mcp9601-safety
-sudo systemctl status ina219-safety
-
-# View logs
 journalctl -u pct2075-safety -f
-journalctl -u mcp9601-safety -f
-journalctl -u ina219-safety -f
-
-# Restart a service
-sudo systemctl restart pct2075-safety
-
-# Stop a service (temporary)
-sudo systemctl stop pct2075-safety
-
-# Disable a service (won't start on boot)
-sudo systemctl disable pct2075-safety
 ```
+
+---
+
+## File Locations
+
+| Type | Location |
+|------|----------|
+| Safety scripts | `/opt/gambit/safety/` |
+| Safety config | `/etc/gambit/safety-config.yaml` |
+| Safety services | `/etc/systemd/system/*.service` |
+| User scripts | `$HOME/*.py`, `$HOME/*.sh` |
+| User services | `$HOME/.config/systemd/user/*.service` |
+
+---
+
+## Requirements
+
+- Raspberry Pi OS Bookworm (Wayland)
+- Python 3.9+
+- I2C enabled (`sudo raspi-config` → Interface Options → I2C)
+
+### Verify I2C
+
+```bash
+ls /dev/i2c-*
+i2cdetect -y 1
+```
+
+---
 
 ## Testing
 
 ```bash
-# Install test dependencies
 pip install pytest pyyaml
-
-# Run tests
 pytest tests/ -v
 ```
 
-## File Locations
+---
 
-| File | Location |
-|------|----------|
-| Scripts | `/opt/gambit/safety/` |
-| Config | `/etc/gambit/safety-config.yaml` |
-| Systemd units | `/etc/systemd/system/` |
-| Logs | `journalctl -u <service-name>` |
+## Uninstall
 
-## Requirements
+```bash
+# Safety scripts
+sudo ./uninstall.sh
 
-- Python 3.9+
-- Raspberry Pi or compatible SBC with I2C
-- I2C enabled (`sudo raspi-config` -> Interface Options -> I2C)
-- Root access (for shutdown command)
-
-## Dependencies
-
-- `adafruit-blinka` - CircuitPython compatibility layer
-- `adafruit-circuitpython-pct2075` - PCT2075 temperature sensor
-- `adafruit-circuitpython-mcp9600` - MCP9601 thermocouple amplifier
-- `adafruit-circuitpython-ina219` - INA219 power monitor
-- `pyyaml` - Configuration file parsing
+# User services (kiosk, buttons, autorotate)
+systemctl --user disable <service>
+rm ~/.config/systemd/user/<service>.service
+```
