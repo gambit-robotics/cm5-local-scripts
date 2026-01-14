@@ -12,7 +12,7 @@ Setup script for Arduino Modulino Buttons (ABX00110) on Raspberry Pi.
 ## Hardware
 
 - **Device**: Arduino Modulino Buttons (ABX00110)
-- **I2C Address**: 0x67 (configurable)
+- **I2C Address**: 0x3E (hardware address, configurable)
 - **I2C Bus**: /dev/i2c-1
 - **Protocol**: Read 4 bytes (skip pinstrap byte), write 3 bytes for LEDs
 
@@ -69,7 +69,7 @@ Environment variables in `~/.config/systemd/user/buttons.service`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| BUTTON_I2C_ADDR | 0x67 | I2C address (hex) |
+| BUTTON_I2C_ADDR | 0x3E | I2C address (hex) |
 | VOLUME_STEP | 5 | Volume change per step (%) |
 | POLL_INTERVAL | 0.05 | Button polling interval (seconds) |
 | ALSA_MIXER | Speaker | ALSA mixer control name |
@@ -161,7 +161,7 @@ amixer sset Speaker 50%
 
 # Check service is using correct mixer
 journalctl --user -u buttons | head -5
-# Should show: Started: I2C=0x67, mixer=Speaker, step=5%
+# Should show: Started: I2C=0x3e, mixer=Speaker, step=5%
 ```
 
 ### I2C errors in logs

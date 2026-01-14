@@ -100,7 +100,7 @@ while True:
         # Current logic: positive→0°, negative→180°
         # If screen is upside-down in either position, flip the condition on next line
         z = accel.acceleration[0]
-        target = None if abs(z) < DEADBAND else (0 if z > 0 else 180)
+        target = None if abs(z) < DEADBAND else (180 if z > 0 else 0)
         
         if target is None:
             stable, count = None, 0

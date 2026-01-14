@@ -53,7 +53,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 log = logging.getLogger()
 
 # Configuration
-I2C_ADDR = int(os.environ.get("BUTTON_I2C_ADDR", "0x67"), 16)
+I2C_ADDR = int(os.environ.get("BUTTON_I2C_ADDR", "0x3E"), 16)
 VOLUME_STEP = int(os.environ.get("VOLUME_STEP", "5"))
 POLL_INTERVAL = float(os.environ.get("POLL_INTERVAL", "0.05"))
 ALSA_MIXER = os.environ.get("ALSA_MIXER", "Speaker")
@@ -185,7 +185,7 @@ Description=I2C Button Controller (Volume)
 After=multi-user.target
 
 [Service]
-Environment=BUTTON_I2C_ADDR=0x67
+Environment=BUTTON_I2C_ADDR=0x3E
 Environment=VOLUME_STEP=5
 Environment=POLL_INTERVAL=0.05
 Environment=ALSA_MIXER=Speaker
