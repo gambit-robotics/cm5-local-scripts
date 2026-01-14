@@ -72,8 +72,8 @@ class ButtonController:
         self.button_press_times = [0.0, 0.0, 0.0]
         self.button_last_repeat = [0.0, 0.0, 0.0]
 
-        # Button A = volume down, Button B = unused, Button C = volume up
-        self.actions = ["volume_down", None, "volume_up"]
+        # Button A = volume up, Button B = unused, Button C = volume down
+        self.actions = ["volume_up", None, "volume_down"]
 
         signal.signal(signal.SIGTERM, self._shutdown)
         signal.signal(signal.SIGINT, self._shutdown)
@@ -209,9 +209,9 @@ echo ""
 echo "Done. Service enabled for $USER_NAME."
 echo ""
 echo "Button mapping:"
-echo "  A = Volume Down"
+echo "  A = Volume Up"
 echo "  B = (unused)"
-echo "  C = Volume Up"
+echo "  C = Volume Down"
 echo ""
 echo "Commands:"
 echo "  systemctl --user start buttons    # Start now"

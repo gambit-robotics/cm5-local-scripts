@@ -94,6 +94,19 @@ def set_rotation(rot):
         subprocess.run(["sudo", "udevadm", "trigger"], check=False)
     log.info(f"Rotated to {rot}°")
 
+# Set initial rotation immediately on startup
+try:
+    z = accel.acceleration[0]
+    if abs(z) >= DEADBAND:
+        initial = 180 if z > 0 else 0
+        set_rotation(initial)
+        last = initial
+        log.info(f"Initial rotation set to {initial}°")
+    else:
+        log.info("Device flat at startup, waiting for tilt...")
+except Exception as e:
+    log.error(f"Initial rotation check failed: {e}")
+
 while True:
     try:
         # X axis: positive=dock, negative=stove
