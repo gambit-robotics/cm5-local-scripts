@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Gambit Safety Scripts Uninstaller
-# Removes PCT2075, MCP9601, and INA219 safety monitoring services
+# Removes PCT2075 and INA219 safety monitoring services
 #
 
 set -e
@@ -10,7 +10,7 @@ INSTALL_DIR="/opt/gambit/safety"
 CONFIG_DIR="/etc/gambit"
 SYSTEMD_DIR="/etc/systemd/system"
 
-SERVICES="pct2075-safety mcp9601-safety ina219-safety"
+SERVICES="pct2075-safety ina219-safety"
 
 echo "=== Gambit Safety Scripts Uninstaller ==="
 echo ""
@@ -37,7 +37,6 @@ done
 # Remove systemd units
 echo "Removing systemd service files..."
 rm -f "$SYSTEMD_DIR/pct2075-safety.service"
-rm -f "$SYSTEMD_DIR/mcp9601-safety.service"
 rm -f "$SYSTEMD_DIR/ina219-safety.service"
 
 # Reload systemd
@@ -47,7 +46,6 @@ systemctl daemon-reload
 # Remove scripts
 echo "Removing scripts from $INSTALL_DIR..."
 rm -f "$INSTALL_DIR/pct2075_safety.py"
-rm -f "$INSTALL_DIR/mcp9601_safety.py"
 rm -f "$INSTALL_DIR/ina219_safety.py"
 
 # Remove install directory if empty
@@ -73,4 +71,4 @@ echo ""
 echo "=== Uninstallation Complete ==="
 echo ""
 echo "Note: Python packages (adafruit-*) were NOT removed."
-echo "To remove them manually: pip3 uninstall adafruit-circuitpython-pct2075 adafruit-circuitpython-mcp9600 adafruit-circuitpython-ina219"
+echo "To remove them manually: pip3 uninstall adafruit-circuitpython-pct2075 adafruit-circuitpython-ina219"

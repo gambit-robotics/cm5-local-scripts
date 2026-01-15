@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Gambit Safety Scripts Installer
-# Installs PCT2075, MCP9601, and INA219 safety monitoring services
+# Installs PCT2075 and INA219 safety monitoring services
 #
 
 set -e
@@ -11,7 +11,7 @@ INSTALL_DIR="/opt/gambit/safety"
 CONFIG_DIR="/etc/gambit"
 SYSTEMD_DIR="/etc/systemd/system"
 
-SERVICES="pct2075-safety mcp9601-safety ina219-safety"
+SERVICES="pct2075-safety ina219-safety"
 
 echo "=== Gambit Safety Scripts Installer ==="
 echo ""
@@ -55,7 +55,6 @@ fi
 
 python3 -m pip install $PIP_ARGS \
     adafruit-circuitpython-pct2075 \
-    adafruit-circuitpython-mcp9600 \
     adafruit-circuitpython-ina219 \
     adafruit-blinka \
     pyyaml
@@ -68,7 +67,6 @@ mkdir -p "$CONFIG_DIR"
 # Copy scripts
 echo "Installing scripts to $INSTALL_DIR..."
 cp "$SCRIPT_DIR/scripts/pct2075_safety.py" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/scripts/mcp9601_safety.py" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/scripts/ina219_safety.py" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR"/*.py
 
@@ -85,7 +83,6 @@ fi
 # Copy systemd units
 echo "Installing systemd service files..."
 cp "$SCRIPT_DIR/systemd/pct2075-safety.service" "$SYSTEMD_DIR/"
-cp "$SCRIPT_DIR/systemd/mcp9601-safety.service" "$SYSTEMD_DIR/"
 cp "$SCRIPT_DIR/systemd/ina219-safety.service" "$SYSTEMD_DIR/"
 
 # Reload systemd

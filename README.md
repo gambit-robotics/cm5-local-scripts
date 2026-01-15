@@ -9,7 +9,7 @@ Raspberry Pi setup scripts and systemd services for kiosk displays, hardware mon
 | [buttons/](buttons/) | I2C volume control buttons | `setup-buttons.sh` |
 | [rotate/](rotate/) | Auto-rotate display via accelerometer | `setup-autorotate.sh` |
 | [kiosk/](kiosk/) | Chromium fullscreen kiosk | `setup-kiosk-wayland.sh`, `setup-kiosk-x11.sh` |
-| [scripts/](scripts/) | Safety monitoring daemons | `pct2075_safety.py`, `mcp9601_safety.py`, `ina219_safety.py` |
+| [scripts/](scripts/) | Safety monitoring daemons | `pct2075_safety.py`, `ina219_safety.py` |
 
 ## Deployment via Base64
 
@@ -124,7 +124,6 @@ Standalone systemd services that monitor hardware sensors via I2C and trigger gr
 | Script | Sensor | Purpose |
 |--------|--------|---------|
 | `pct2075_safety.py` | PCT2075 | Ambient temperature |
-| `mcp9601_safety.py` | MCP9601 | Thermocouple temperature |
 | `ina219_safety.py` | INA219 | UPS battery level |
 
 ### Installation
@@ -144,12 +143,6 @@ pct2075:
   shutdown_temp_c: 80
   poll_interval_s: 5
 
-mcp9601:
-  i2c_address: 0x67
-  warning_temp_c: 60
-  shutdown_temp_c: 75
-  poll_interval_s: 5
-
 ina219:
   i2c_address: 0x42
   warning_battery_percent: 15
@@ -159,7 +152,7 @@ ina219:
 ```
 
 ```bash
-sudo systemctl restart pct2075-safety mcp9601-safety ina219-safety
+sudo systemctl restart pct2075-safety ina219-safety
 ```
 
 ### Behavior
