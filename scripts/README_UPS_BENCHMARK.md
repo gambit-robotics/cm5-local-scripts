@@ -39,7 +39,7 @@ python3 ups_benchmark.py cyclic --cycle-duration 60 --threshold 10
 | `--output DIR` | `.` | CSV output directory |
 | `--cycle-duration SEC` | 60 | Seconds per load level (cyclic mode) |
 | `--cells N` | 3 | Battery cell count (1-6) |
-| `--i2c-address ADDR` | 0x42 | INA219 I2C address |
+| `--i2c-address ADDR` | 0x41 | INA219 I2C address |
 | `--no-csv` | false | Console output only |
 
 ## Output

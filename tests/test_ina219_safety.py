@@ -28,7 +28,7 @@ def mock_config(tmp_path):
     """Create a temporary config file."""
     config = {
         "ina219": {
-            "i2c_address": "0x42",
+            "i2c_address": "0x41",
             "warning_battery_percent": 15,
             "shutdown_battery_percent": 5,
             "poll_interval_s": 1,
@@ -126,14 +126,14 @@ class TestConfigLoading:
             full_config = yaml.safe_load(f)
 
         config = full_config["ina219"]
-        assert config["i2c_address"] == "0x42"
+        assert config["i2c_address"] == "0x41"
         assert config["warning_battery_percent"] == 15
         assert config["shutdown_battery_percent"] == 5
 
     def test_parse_i2c_address_string(self):
         """Test parsing hex string I2C address."""
-        assert parse_i2c_address("0x42") == 0x42
-        assert parse_i2c_address(0x42) == 0x42
+        assert parse_i2c_address("0x41") == 0x41
+        assert parse_i2c_address(0x41) == 0x41
 
 
 class TestThresholds:

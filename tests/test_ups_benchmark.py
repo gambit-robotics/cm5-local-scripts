@@ -74,8 +74,8 @@ class TestI2CAddressParsing:
 
     def test_parse_hex_string(self):
         """Test parsing hex string I2C address."""
-        assert parse_i2c_address("0x42") == 0x42
-        assert parse_i2c_address("0X42") == 0x42
+        assert parse_i2c_address("0x41") == 0x41
+        assert parse_i2c_address("0X42") == 0x41
 
     def test_parse_decimal_string(self):
         """Test parsing decimal string I2C address."""
@@ -185,14 +185,14 @@ class TestSensorReader:
 
     def test_initialize_success(self, mock_imports):
         """Test successful sensor initialization."""
-        reader = SensorReader(i2c_address=0x42)
+        reader = SensorReader(i2c_address=0x41)
         result = reader.initialize()
         assert result is True
         assert reader.sensor is not None
 
     def test_read_success(self, mock_imports):
         """Test successful sensor read."""
-        reader = SensorReader(i2c_address=0x42)
+        reader = SensorReader(i2c_address=0x41)
         reader.initialize()
 
         reading = reader.read()
@@ -207,7 +207,7 @@ class TestSensorReader:
         mock_imports["sensor"].bus_voltage = 11.5
         mock_imports["sensor"].shunt_voltage = 0.05
 
-        reader = SensorReader(i2c_address=0x42)
+        reader = SensorReader(i2c_address=0x41)
         reader.initialize()
 
         reading = reader.read()
@@ -217,7 +217,7 @@ class TestSensorReader:
         """Test detection of charging state."""
         mock_imports["sensor"].current = 500  # Positive = charging
 
-        reader = SensorReader(i2c_address=0x42)
+        reader = SensorReader(i2c_address=0x41)
         reader.initialize()
 
         reading = reader.read()
@@ -227,7 +227,7 @@ class TestSensorReader:
         """Test detection of discharging state."""
         mock_imports["sensor"].current = -500  # Negative = discharging
 
-        reader = SensorReader(i2c_address=0x42)
+        reader = SensorReader(i2c_address=0x41)
         reader.initialize()
 
         reading = reader.read()
@@ -239,7 +239,7 @@ class TestSensorReader:
             lambda self: (_ for _ in ()).throw(OSError("I2C error"))
         )
 
-        reader = SensorReader(i2c_address=0x42)
+        reader = SensorReader(i2c_address=0x41)
         reader.sensor = mock_imports["sensor"]
 
         # Force sensor to raise on attribute access
@@ -254,7 +254,7 @@ class TestSensorReader:
 
     def test_consecutive_failure_counting(self, mock_imports):
         """Test that consecutive failures are counted."""
-        reader = SensorReader(i2c_address=0x42)
+        reader = SensorReader(i2c_address=0x41)
         reader.sensor = MagicMock()
         reader.sensor.bus_voltage = MagicMock(side_effect=OSError("I2C error"))
 
@@ -264,7 +264,7 @@ class TestSensorReader:
 
     def test_failure_count_resets_on_success(self, mock_imports):
         """Test that failure count resets on successful read."""
-        reader = SensorReader(i2c_address=0x42)
+        reader = SensorReader(i2c_address=0x41)
         reader.initialize()
         reader.consecutive_failures = 3
 
@@ -286,7 +286,7 @@ class TestBenchmarkRunnerArgs:
         args.output = "/tmp"
         args.cycle_duration = 60
         args.cells = 3
-        args.i2c_address = 0x42
+        args.i2c_address = 0x41
         args.no_csv = True
         return args
 

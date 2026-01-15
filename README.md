@@ -144,7 +144,7 @@ pct2075:
   poll_interval_s: 5
 
 ina219:
-  i2c_address: 0x42
+  i2c_address: 0x41
   warning_battery_percent: 15
   shutdown_battery_percent: 5
   poll_interval_s: 10

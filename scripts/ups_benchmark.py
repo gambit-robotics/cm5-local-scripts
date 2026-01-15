@@ -25,7 +25,7 @@ from typing import Optional
 CELL_VOLTAGE_FULL = 4.2  # V per cell at 100%
 CELL_VOLTAGE_EMPTY = 3.0  # V per cell at 0%
 DEFAULT_CELL_COUNT = 3
-DEFAULT_I2C_ADDRESS = 0x42
+DEFAULT_I2C_ADDRESS = 0x41
 
 # Configure logging
 logging.basicConfig(

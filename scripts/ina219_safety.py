@@ -108,7 +108,7 @@ def main() -> None:
     config = load_config()
 
     try:
-        i2c_address = parse_i2c_address(config.get("i2c_address", 0x42))
+        i2c_address = parse_i2c_address(config.get("i2c_address", 0x41))
         warning_percent = _coerce_float("warning_battery_percent", config.get("warning_battery_percent", 15))
         shutdown_percent = _coerce_float("shutdown_battery_percent", config.get("shutdown_battery_percent", 5))
         poll_interval = _coerce_float("poll_interval_s", config.get("poll_interval_s", 10))
