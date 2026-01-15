@@ -20,9 +20,11 @@ SERVICE_FILE="$SERVICE_DIR/kiosk.service"
 
 echo "Setting up Wayland kiosk for user: $KIOSK_USER"
 
-# Step 1: Install dependencies
+# Step 1: Install dependencies (skip apt-get update if called from unified installer)
 echo "Installing dependencies..."
-apt-get update -qq
+if [[ "${SKIP_APT_UPDATE:-}" != "1" ]]; then
+    apt-get update -qq
+fi
 apt-get install -y -qq chromium curl >/dev/null
 
 # Step 2: Create start-kiosk.sh

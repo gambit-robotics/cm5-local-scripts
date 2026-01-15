@@ -23,8 +23,10 @@ USER_ID=$(id -u "$USER_NAME")
 
 echo "Setting up auto-rotate for $USER_NAME on $OUTPUT_NAME"
 
-# Install packages
-apt-get update -qq
+# Install packages (skip apt-get update if called from unified installer)
+if [[ "${SKIP_APT_UPDATE:-}" != "1" ]]; then
+    apt-get update -qq
+fi
 apt-get install -y -qq wlr-randr python3 python3-pip i2c-tools >/dev/null
 pip3 install --quiet --break-system-packages adafruit-circuitpython-lis3dh
 

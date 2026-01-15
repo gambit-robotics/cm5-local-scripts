@@ -21,8 +21,10 @@ USER_ID=$(id -u "$USER_NAME")
 
 echo "Setting up I2C button controller for $USER_NAME"
 
-# Install packages
-apt-get update -qq
+# Install packages (skip apt-get update if called from unified installer)
+if [[ "${SKIP_APT_UPDATE:-}" != "1" ]]; then
+    apt-get update -qq
+fi
 apt-get install -y -qq python3 python3-smbus i2c-tools alsa-utils >/dev/null
 
 # Add user to i2c group

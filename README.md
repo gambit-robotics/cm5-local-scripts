@@ -11,6 +11,31 @@ Raspberry Pi setup scripts and systemd services for kiosk displays, hardware mon
 | [kiosk/](kiosk/) | Chromium fullscreen kiosk | `setup-kiosk-wayland.sh`, `setup-kiosk-x11.sh` |
 | [scripts/](scripts/) | Safety monitoring daemons | `pct2075_safety.py`, `ina219_safety.py` |
 
+## Unified Installation
+
+The `install.sh` script supports modular installation of all components:
+
+```bash
+# Safety monitoring only (default)
+sudo ./install.sh
+
+# Install specific modules (requires username)
+sudo ./install.sh --buttons <username>
+sudo ./install.sh --rotate <username> <display-output> [touch-device]
+sudo ./install.sh --kiosk <username>
+
+# Install everything
+sudo ./install.sh --all <username> <display-output> [touch-device]
+
+# Skip safety, install only user modules
+sudo ./install.sh --no-safety --buttons --kiosk <username>
+
+# Show help
+sudo ./install.sh --help
+```
+
+---
+
 ## Deployment via Base64
 
 Scripts are transferred to Pi via base64 encoding to avoid issues with special characters, line endings, and shell escaping.
@@ -210,10 +235,17 @@ pytest tests/ -v
 ## Uninstall
 
 ```bash
-# Safety scripts
+# Safety monitoring only (default)
 sudo ./uninstall.sh
 
-# User services (kiosk, buttons, autorotate)
-systemctl --user disable <service>
-rm ~/.config/systemd/user/<service>.service
+# Uninstall specific modules
+sudo ./uninstall.sh --buttons <username>
+sudo ./uninstall.sh --rotate <username>
+sudo ./uninstall.sh --kiosk <username>
+
+# Uninstall everything
+sudo ./uninstall.sh --all <username>
+
+# Show help
+sudo ./uninstall.sh --help
 ```
