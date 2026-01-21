@@ -10,6 +10,7 @@ Raspberry Pi setup scripts and systemd services for kiosk displays, hardware mon
 | [rotate/](rotate/) | Auto-rotate display via accelerometer | `setup-autorotate.sh` |
 | [kiosk/](kiosk/) | Chromium fullscreen kiosk | `setup-kiosk-wayland.sh`, `setup-kiosk-x11.sh` |
 | [scripts/](scripts/) | Safety monitoring daemons | `pct2075_safety.py`, `ina219_safety.py` |
+| [config/](config/) | Pi boot & audio configs | `config.txt`, `asound.conf` |
 
 ## Unified Installation
 
@@ -19,6 +20,9 @@ The `install.sh` script supports modular installation of all components:
 # Safety monitoring only (default)
 sudo ./install.sh
 
+# Install config files (boot + audio)
+sudo ./install.sh --config
+
 # Install specific modules (requires username)
 sudo ./install.sh --buttons <username>
 sudo ./install.sh --rotate <username> <display-output> [touch-device]
@@ -27,8 +31,8 @@ sudo ./install.sh --kiosk <username>
 # Install everything
 sudo ./install.sh --all <username> <display-output> [touch-device]
 
-# Skip safety, install only user modules
-sudo ./install.sh --no-safety --buttons --kiosk <username>
+# Config + shell services only (no Python safety scripts)
+sudo ./install.sh --no-safety --config --buttons --kiosk <username>
 
 # Show help
 sudo ./install.sh --help
@@ -139,6 +143,33 @@ echo $XDG_SESSION_TYPE   # wayland or x11
 systemctl --user status kiosk
 journalctl --user -u kiosk -f
 ```
+
+---
+
+## Config Files
+
+Reference configuration files for Raspberry Pi CM4/CM5.
+
+| File | Destination | Purpose |
+|------|-------------|---------|
+| `config.txt` | `/boot/firmware/config.txt` | Boot config (I2C, SPI, display, camera) |
+| `asound.conf` | `/etc/asound.conf` | ALSA audio routing for USB audio device |
+
+### Deploy
+
+```bash
+# Boot config
+base64 < config/config.txt | pbcopy
+# On Pi:
+echo 'BASE64' | base64 -d | sudo tee /boot/firmware/config.txt
+
+# Audio config
+base64 < config/asound.conf | pbcopy
+# On Pi:
+echo 'BASE64' | base64 -d | sudo tee /etc/asound.conf
+```
+
+**Note**: Reboot required after changing `/boot/firmware/config.txt`.
 
 ---
 

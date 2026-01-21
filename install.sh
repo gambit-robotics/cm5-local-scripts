@@ -12,7 +12,8 @@ CONFIG_DIR="/etc/gambit"
 SYSTEMD_DIR="/etc/systemd/system"
 
 # Module flags (defaults)
-INSTALL_SAFETY=true
+INSTALL_SAFETY=false
+INSTALL_CONFIG=false
 INSTALL_BUTTONS=false
 INSTALL_ROTATE=false
 INSTALL_KIOSK=false
@@ -34,12 +35,13 @@ Usage: sudo ./install.sh [OPTIONS] [<username> [<display-output> [<touch-device>
 
 Modules:
   (default)         Install safety monitoring services only
+  --config          Install boot config & audio config (requires reboot)
   --buttons         Install I2C volume button controller
   --rotate          Install auto-rotate (requires display-output arg)
   --kiosk           Install Chromium kiosk (auto-detects display server)
   --kiosk-wayland   Install Wayland kiosk explicitly
   --kiosk-x11       Install X11 kiosk explicitly
-  --all             Install all modules
+  --all             Install all modules (including config)
   --no-safety       Skip safety services (use with other modules)
 
 Arguments (required for user-level modules):
@@ -66,12 +68,13 @@ die() { echo "Error: $*" >&2; exit 1; }
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --help|-h) show_help ;;
+        --config) INSTALL_CONFIG=true; shift ;;
         --buttons) INSTALL_BUTTONS=true; shift ;;
         --rotate) INSTALL_ROTATE=true; shift ;;
         --kiosk) INSTALL_KIOSK=true; shift ;;
         --kiosk-wayland) INSTALL_KIOSK=true; KIOSK_TYPE="wayland"; shift ;;
         --kiosk-x11) INSTALL_KIOSK=true; KIOSK_TYPE="x11"; shift ;;
-        --all) INSTALL_BUTTONS=true; INSTALL_ROTATE=true; INSTALL_KIOSK=true; shift ;;
+        --all) INSTALL_CONFIG=true; INSTALL_BUTTONS=true; INSTALL_ROTATE=true; INSTALL_KIOSK=true; shift ;;
         --no-safety) INSTALL_SAFETY=false; shift ;;
         -*)
             die "Unknown option: $1. Use --help for usage."
@@ -195,6 +198,40 @@ install_safety() {
 }
 
 # ------------------------------------------------------------------------------
+# Module: Config
+# ------------------------------------------------------------------------------
+install_config() {
+    echo ""
+    echo "=== Installing System Configuration ==="
+
+    # Boot config
+    if [[ -f "$SCRIPT_DIR/config/config.txt" ]]; then
+        echo "Installing boot config to /boot/firmware/config.txt..."
+        if [[ -f /boot/firmware/config.txt ]]; then
+            cp /boot/firmware/config.txt /boot/firmware/config.txt.backup
+            echo "  Backed up existing config to /boot/firmware/config.txt.backup"
+        fi
+        cp "$SCRIPT_DIR/config/config.txt" /boot/firmware/config.txt
+    else
+        echo "Warning: config/config.txt not found, skipping boot config"
+    fi
+
+    # Audio config
+    if [[ -f "$SCRIPT_DIR/config/asound.conf" ]]; then
+        echo "Installing audio config to /etc/asound.conf..."
+        if [[ -f /etc/asound.conf ]]; then
+            cp /etc/asound.conf /etc/asound.conf.backup
+            echo "  Backed up existing config to /etc/asound.conf.backup"
+        fi
+        cp "$SCRIPT_DIR/config/asound.conf" /etc/asound.conf
+    else
+        echo "Warning: config/asound.conf not found, skipping audio config"
+    fi
+
+    echo "System configuration installed."
+}
+
+# ------------------------------------------------------------------------------
 # Module: Buttons
 # ------------------------------------------------------------------------------
 install_buttons() {
@@ -266,6 +303,7 @@ apt-get update -qq
 export SKIP_APT_UPDATE=1
 
 # Install requested modules
+$INSTALL_CONFIG && install_config
 $INSTALL_SAFETY && install_safety
 $INSTALL_BUTTONS && install_buttons
 $INSTALL_ROTATE && install_rotate
@@ -277,6 +315,13 @@ $INSTALL_KIOSK && install_kiosk
 echo ""
 echo "=== Installation Complete ==="
 echo ""
+
+if $INSTALL_CONFIG; then
+    echo "System config installed:"
+    echo "  - /boot/firmware/config.txt"
+    echo "  - /etc/asound.conf"
+    echo ""
+fi
 
 if $INSTALL_SAFETY; then
     echo "Safety services:"
