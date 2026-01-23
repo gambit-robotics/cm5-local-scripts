@@ -63,6 +63,7 @@ sleep 1
 echo "Launching Chromium kiosk on Wayland..."
 exec chromium \
     --ozone-platform=wayland \
+    --password-store=basic \
     --noerrdialogs \
     --disable-infobars \
     --disable-session-crashed-bubble \

@@ -72,6 +72,7 @@ sleep 1
 
 echo "Launching Chromium kiosk on X11..."
 exec chromium \
+    --password-store=basic \
     --noerrdialogs \
     --disable-infobars \
     --disable-session-crashed-bubble \
