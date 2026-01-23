@@ -1,6 +1,6 @@
 [Unit]
 Description=PCT2075 Temperature Safety Monitor
-Documentation=https://github.com/gambit-robotics/gambit-safety-scripts
+Documentation=https://github.com/gambit-robotics/cm5-local-scripts
 After=local-fs.target sysinit.target
 Wants=local-fs.target
 StartLimitIntervalSec=300

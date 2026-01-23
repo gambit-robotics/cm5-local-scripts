@@ -2,7 +2,7 @@
 
 Raspberry Pi setup scripts and systemd services for kiosk displays, hardware monitoring, and peripheral control.
 
-/safety-scripts are developed but are neither tested nor deployed
+/cm5-local-scripts are developed but are neither tested nor deployed
 
 ## Modules
 
@@ -68,7 +68,7 @@ sudo -u USER XDG_RUNTIME_DIR=/run/user/$(id -u USER) wlr-randr | grep -E "^[A-Z]
 curl -sL https://dpaste.com/ABC123.txt | base64 -d | tar xzf - -C /tmp
 
 # Install (replace USER and DISPLAY)
-cd /tmp/safety-scripts
+cd /tmp/cm5-local-scripts
 sudo ./install.sh --no-safety --config --buttons --rotate --kiosk USER DISPLAY
 
 # Reboot

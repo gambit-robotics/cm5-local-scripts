@@ -11,7 +11,7 @@
 #
 # On Pi (via Viam shell):
 #   curl -sL <DPASTE_URL>.txt | base64 -d | tar xzf - -C /tmp
-#   cd /tmp/safety-scripts
+#   cd /tmp/cm5-local-scripts
 #   sudo ./install.sh --no-safety --config --buttons --rotate --kiosk <username> <display>
 #
 
@@ -28,23 +28,23 @@ echo "Bundling: ${FILES[*]} ${DIRS[*]}"
 
 # Create temp dir with proper structure
 TMPDIR=$(mktemp -d)
-mkdir -p "$TMPDIR/safety-scripts"
+mkdir -p "$TMPDIR/cm5-local-scripts"
 
 # Copy files
 for f in "${FILES[@]}"; do
-    cp "$f" "$TMPDIR/safety-scripts/"
+    cp "$f" "$TMPDIR/cm5-local-scripts/"
 done
 
 # Copy directories preserving structure
 for d in "${DIRS[@]}"; do
-    cp -r "$d" "$TMPDIR/safety-scripts/"
+    cp -r "$d" "$TMPDIR/cm5-local-scripts/"
 done
 
 # Make scripts executable
-find "$TMPDIR/safety-scripts" -name "*.sh" -exec chmod +x {} \;
+find "$TMPDIR/cm5-local-scripts" -name "*.sh" -exec chmod +x {} \;
 
 # Create tarball without macOS metadata, base64 encode, copy to clipboard
-COPYFILE_DISABLE=1 tar czf - -C "$TMPDIR" safety-scripts | base64 | pbcopy
+COPYFILE_DISABLE=1 tar czf - -C "$TMPDIR" cm5-local-scripts | base64 | pbcopy
 
 # Cleanup
 rm -rf "$TMPDIR"
@@ -58,5 +58,5 @@ echo "  curl -s -F 'content=<-' https://dpaste.com/api/ < /tmp/bundle.b64"
 echo ""
 echo "On Pi (Viam shell):"
 echo "  curl -sL <URL>.txt | base64 -d | tar xzf - -C /tmp"
-echo "  cd /tmp/safety-scripts"
+echo "  cd /tmp/cm5-local-scripts"
 echo "  sudo ./install.sh --no-safety --config --buttons --rotate --kiosk <user> <display>"
