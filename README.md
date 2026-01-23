@@ -40,36 +40,47 @@ sudo ./install.sh --help
 
 ---
 
-## Deployment via Base64
+## Remote Deployment (Viam Shell)
 
-Scripts are transferred to Pi via base64 encoding to avoid issues with special characters, line endings, and shell escaping.
+For deploying to Pis accessible only via Viam remote shell (no direct SSH).
 
-### Encode (local machine)
-
-```bash
-# macOS - copies to clipboard
-base64 < path/to/script.sh | pbcopy
-
-# Linux - print to stdout
-base64 < path/to/script.sh
-```
-
-### Decode and run (Pi via SSH)
+### 1. Bundle scripts (Mac - once)
 
 ```bash
-# Decode to file
-echo 'PASTE_BASE64_HERE' | base64 -d > /tmp/script.sh
-chmod +x /tmp/script.sh
-
-# Run
-sudo /tmp/script.sh <args>
+./bundle.sh
+pbpaste > /tmp/bundle.b64
+curl -s -F 'content=<-' https://dpaste.com/api/ < /tmp/bundle.b64
+# Returns a URL like: https://dpaste.com/ABC123
 ```
 
-### One-liner
+### 2. Deploy to each Pi (Viam shell)
 
 ```bash
-echo 'BASE64_STRING' | base64 -d | sudo bash -s <args>
+# Find username
+ls /home
+
+# Get display output (replace USER with username)
+sudo -u USER XDG_RUNTIME_DIR=/run/user/$(id -u USER) wlr-randr | grep -E "^[A-Z]"
+
+# Download and extract
+curl -sL https://dpaste.com/ABC123.txt | base64 -d | tar xzf - -C /tmp
+
+# Install (replace USER and DISPLAY)
+cd /tmp/safety-scripts
+sudo ./install.sh --no-safety --config --buttons --rotate --kiosk USER DISPLAY
+
+# Reboot
+sudo reboot
 ```
+
+### Quick reference
+
+| Step | Command |
+|------|---------|
+| Find user | `ls /home` |
+| Find display | `sudo -u USER XDG_RUNTIME_DIR=/run/user/$(id -u USER) wlr-randr \| grep -E "^[A-Z]"` |
+| Download bundle | `curl -sL <URL>.txt \| base64 -d \| tar xzf - -C /tmp` |
+| Install | `sudo ./install.sh --no-safety --config --buttons --rotate --kiosk USER DISPLAY` |
 
 ---
 

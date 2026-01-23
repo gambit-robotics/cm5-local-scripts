@@ -5,10 +5,14 @@
 #
 # Usage: ./bundle.sh
 #
+# Then upload to dpaste:
+#   pbpaste > /tmp/bundle.b64
+#   curl -s -F 'content=<-' https://dpaste.com/api/ < /tmp/bundle.b64
+#
 # On Pi (via Viam shell):
-#   echo 'PASTE_HERE' | base64 -d | tar xzf - -C /tmp
+#   curl -sL <DPASTE_URL>.txt | base64 -d | tar xzf - -C /tmp
 #   cd /tmp/safety-scripts
-#   sudo ./install.sh --config --buttons --kiosk <username>
+#   sudo ./install.sh --no-safety --config --buttons --rotate --kiosk <username> <display>
 #
 
 set -e
@@ -16,25 +20,31 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Files to bundle (excludes Python scripts and tests)
-FILES=(
-    install.sh
-    uninstall.sh
-    config/
-    buttons/
-    rotate/
-    kiosk/
-)
+# Files/dirs to bundle (excludes Python scripts and tests)
+DIRS=(config buttons rotate kiosk)
+FILES=(install.sh uninstall.sh)
 
-echo "Bundling: ${FILES[*]}"
+echo "Bundling: ${FILES[*]} ${DIRS[*]}"
 
-# Create temp dir with proper structure (macOS tar doesn't support --transform)
+# Create temp dir with proper structure
 TMPDIR=$(mktemp -d)
 mkdir -p "$TMPDIR/safety-scripts"
-cp -r "${FILES[@]}" "$TMPDIR/safety-scripts/"
 
-# Create tarball, base64 encode, copy to clipboard
-tar czf - -C "$TMPDIR" safety-scripts | base64 | pbcopy
+# Copy files
+for f in "${FILES[@]}"; do
+    cp "$f" "$TMPDIR/safety-scripts/"
+done
+
+# Copy directories preserving structure
+for d in "${DIRS[@]}"; do
+    cp -r "$d" "$TMPDIR/safety-scripts/"
+done
+
+# Make scripts executable
+find "$TMPDIR/safety-scripts" -name "*.sh" -exec chmod +x {} \;
+
+# Create tarball without macOS metadata, base64 encode, copy to clipboard
+COPYFILE_DISABLE=1 tar czf - -C "$TMPDIR" safety-scripts | base64 | pbcopy
 
 # Cleanup
 rm -rf "$TMPDIR"
@@ -42,7 +52,11 @@ rm -rf "$TMPDIR"
 echo ""
 echo "Copied to clipboard!"
 echo ""
+echo "Upload to dpaste:"
+echo "  pbpaste > /tmp/bundle.b64"
+echo "  curl -s -F 'content=<-' https://dpaste.com/api/ < /tmp/bundle.b64"
+echo ""
 echo "On Pi (Viam shell):"
-echo "  echo 'PASTE' | base64 -d | tar xzf - -C /tmp"
+echo "  curl -sL <URL>.txt | base64 -d | tar xzf - -C /tmp"
 echo "  cd /tmp/safety-scripts"
-echo "  sudo ./install.sh --config --buttons --kiosk <username>"
+echo "  sudo ./install.sh --no-safety --config --buttons --rotate --kiosk <user> <display>"
