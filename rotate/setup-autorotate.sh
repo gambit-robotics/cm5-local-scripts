@@ -96,18 +96,34 @@ def set_rotation(rot):
         subprocess.run(["sudo", "udevadm", "trigger"], check=False)
     log.info(f"Rotated to {rot}°")
 
-# Set initial rotation immediately on startup
+def wait_for_display(timeout=30):
+    """Wait for Wayland display to be ready"""
+    for _ in range(timeout):
+        result = subprocess.run(["wlr-randr"], capture_output=True)
+        if result.returncode == 0:
+            return True
+        time.sleep(1)
+    return False
+
+# Wait for display before setting initial rotation
+if not wait_for_display():
+    log.error("Display not ready after timeout")
+
+# Set initial rotation (use reading if clear, else default to 0°)
 try:
     z = accel.acceleration[0]
     if abs(z) >= DEADBAND:
         initial = 180 if z > 0 else 0
-        set_rotation(initial)
-        last = initial
-        log.info(f"Initial rotation set to {initial}°")
     else:
-        log.info("Device flat at startup, waiting for tilt...")
+        initial = 0  # Default when flat
+        log.info("Device flat at startup, defaulting to 0°")
+    set_rotation(initial)
+    last = initial
+    log.info(f"Initial rotation set to {initial}°")
 except Exception as e:
     log.error(f"Initial rotation check failed: {e}")
+    set_rotation(0)  # Fallback default
+    last = 0
 
 while True:
     try:
@@ -148,6 +164,7 @@ Environment=DISPLAY_OUTPUT=$OUTPUT_NAME
 Environment=TOUCH_DEVICE=$TOUCH_DEVICE
 Environment=WAYLAND_DISPLAY=wayland-0
 Environment=XDG_RUNTIME_DIR=/run/user/$USER_ID
+ExecStartPre=/bin/sleep 3
 ExecStart=/usr/bin/python3 $PY_SCRIPT
 Restart=on-failure
 

@@ -17,6 +17,7 @@ INSTALL_CONFIG=false
 INSTALL_BUTTONS=false
 INSTALL_ROTATE=false
 INSTALL_KIOSK=false
+INSTALL_PLYMOUTH=false
 KIOSK_TYPE=""  # "wayland", "x11", or "" (auto-detect)
 
 # User module arguments
@@ -41,6 +42,7 @@ Modules:
   --kiosk           Install Chromium kiosk (auto-detects display server)
   --kiosk-wayland   Install Wayland kiosk explicitly
   --kiosk-x11       Install X11 kiosk explicitly
+  --plymouth        Install custom boot splash screen
   --all             Install all modules (including config)
   --no-safety       Skip safety services (use with other modules)
 
@@ -74,7 +76,8 @@ while [[ $# -gt 0 ]]; do
         --kiosk) INSTALL_KIOSK=true; shift ;;
         --kiosk-wayland) INSTALL_KIOSK=true; KIOSK_TYPE="wayland"; shift ;;
         --kiosk-x11) INSTALL_KIOSK=true; KIOSK_TYPE="x11"; shift ;;
-        --all) INSTALL_CONFIG=true; INSTALL_BUTTONS=true; INSTALL_ROTATE=true; INSTALL_KIOSK=true; shift ;;
+        --plymouth) INSTALL_PLYMOUTH=true; shift ;;
+        --all) INSTALL_CONFIG=true; INSTALL_BUTTONS=true; INSTALL_ROTATE=true; INSTALL_KIOSK=true; INSTALL_PLYMOUTH=true; shift ;;
         --no-safety) INSTALL_SAFETY=false; shift ;;
         -*)
             die "Unknown option: $1. Use --help for usage."
@@ -290,6 +293,15 @@ install_kiosk() {
 }
 
 # ------------------------------------------------------------------------------
+# Module: Plymouth
+# ------------------------------------------------------------------------------
+install_plymouth() {
+    echo ""
+    echo "=== Installing Plymouth Boot Splash ==="
+    "$SCRIPT_DIR/plymouth/setup-bootsplash.sh"
+}
+
+# ------------------------------------------------------------------------------
 # Main
 # ------------------------------------------------------------------------------
 echo "=== Gambit Scripts Installer ==="
@@ -308,6 +320,7 @@ $INSTALL_SAFETY && install_safety
 $INSTALL_BUTTONS && install_buttons
 $INSTALL_ROTATE && install_rotate
 $INSTALL_KIOSK && install_kiosk
+$INSTALL_PLYMOUTH && install_plymouth
 
 # ------------------------------------------------------------------------------
 # Summary
@@ -340,6 +353,13 @@ if $INSTALL_BUTTONS || $INSTALL_ROTATE || $INSTALL_KIOSK; then
     echo "Commands (run as $TARGET_USER):"
     echo "  systemctl --user status <service>"
     echo "  journalctl --user -u <service> -f"
+fi
+
+if $INSTALL_PLYMOUTH; then
+    echo ""
+    echo "Plymouth boot splash installed."
+    echo "  Theme: gambit"
+    echo "  Test: sudo plymouthd --debug --tty=/dev/tty1 && sudo plymouth show-splash"
 fi
 
 echo ""

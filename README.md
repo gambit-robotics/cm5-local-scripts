@@ -11,30 +11,42 @@ Raspberry Pi setup scripts and systemd services for kiosk displays, hardware mon
 | [buttons/](buttons/) | I2C volume control buttons | `setup-buttons.sh` |
 | [rotate/](rotate/) | Auto-rotate display via accelerometer | `setup-autorotate.sh` |
 | [kiosk/](kiosk/) | Chromium fullscreen kiosk | `setup-kiosk-wayland.sh`, `setup-kiosk-x11.sh` |
+| [plymouth/](plymouth/) | Custom boot splash screen | `setup-bootsplash.sh` |
 | [scripts/](scripts/) | Safety monitoring daemons | `pct2075_safety.py`, `ina219_safety.py` |
 | [config/](config/) | Pi boot & audio configs | `config.txt`, `asound.conf` |
 
-## Unified Installation
+## Quick Start
 
-The `install.sh` script supports modular installation of all components:
+Run `make` to see all available commands:
 
 ```bash
-# Safety monitoring only (default)
-sudo ./install.sh
+make              # Show help
+make deploy       # Bundle + upload to dpaste (macOS)
+make install-all DISPLAY=HDMI-A-1   # Install everything (Pi)
+make update-rotate DISPLAY=HDMI-A-1 # Update single module (Pi)
+```
 
-# Install config files (boot + audio)
-sudo ./install.sh --config
+User is auto-detected from `sudo`. Override with `USER=<name>` if needed.
 
-# Install specific modules (requires username)
-sudo ./install.sh --buttons <username>
-sudo ./install.sh --rotate <username> <display-output> [touch-device]
-sudo ./install.sh --kiosk <username>
+---
 
-# Install everything
-sudo ./install.sh --all <username> <display-output> [touch-device]
+## Unified Installation
 
-# Config + shell services only (no Python safety scripts)
-sudo ./install.sh --no-safety --config --buttons --kiosk <username>
+The `install.sh` script supports modular installation. Use `make` targets or call directly:
+
+```bash
+# Install everything (user auto-detected)
+make install-all DISPLAY=HDMI-A-1
+
+# Or call install.sh directly
+sudo ./install.sh --all <username> <display-output>
+
+# Individual modules
+make install-kiosk
+make install-plymouth
+make install-config
+make install-buttons
+make install-rotate DISPLAY=HDMI-A-1
 
 # Show help
 sudo ./install.sh --help
@@ -46,43 +58,49 @@ sudo ./install.sh --help
 
 For deploying to Pis accessible only via Viam remote shell (no direct SSH).
 
-### 1. Bundle scripts (Mac - once)
+### 1. Bundle and upload (Mac)
 
 ```bash
-./bundle.sh
-pbpaste > /tmp/bundle.b64
-curl -s -F 'content=<-' https://dpaste.com/api/ < /tmp/bundle.b64
-# Returns a URL like: https://dpaste.com/ABC123
+make deploy
+# Outputs URL like: https://dpaste.com/ABC123
 ```
 
-### 2. Deploy to each Pi (Viam shell)
+### 2. Deploy to Pi (Viam shell)
 
 ```bash
-# Find username
-ls /home
-
-# Get display output (replace USER with username)
-sudo -u USER XDG_RUNTIME_DIR=/run/user/$(id -u USER) wlr-randr | grep -E "^[A-Z]"
-
 # Download and extract
 curl -sL https://dpaste.com/ABC123.txt | base64 -d | tar xzf - -C /tmp
-
-# Install (replace USER and DISPLAY)
 cd /tmp/cm5-local-scripts
-sudo ./install.sh --no-safety --config --buttons --rotate --kiosk USER DISPLAY
+
+# Find display output
+wlr-randr | grep -E "^[A-Z]"
+
+# Install everything (user auto-detected)
+make install-all DISPLAY=HDMI-A-1
 
 # Reboot
 sudo reboot
+```
+
+### Updating a single module
+
+```bash
+# Re-deploy bundle, then on Pi:
+curl -sL <URL>.txt | base64 -d | tar xzf - -C /tmp
+cd /tmp/cm5-local-scripts
+make update-rotate DISPLAY=HDMI-A-1   # Redeploys + restarts service
+make update-kiosk                      # No reboot needed
 ```
 
 ### Quick reference
 
 | Step | Command |
 |------|---------|
-| Find user | `ls /home` |
-| Find display | `sudo -u USER XDG_RUNTIME_DIR=/run/user/$(id -u USER) wlr-randr \| grep -E "^[A-Z]"` |
-| Download bundle | `curl -sL <URL>.txt \| base64 -d \| tar xzf - -C /tmp` |
-| Install | `sudo ./install.sh --no-safety --config --buttons --rotate --kiosk USER DISPLAY` |
+| Deploy bundle | `make deploy` (Mac) |
+| Download | `curl -sL <URL>.txt \| base64 -d \| tar xzf - -C /tmp` |
+| Find display | `wlr-randr \| grep -E "^[A-Z]"` |
+| Install all | `make install-all DISPLAY=HDMI-A-1` |
+| Update module | `make update-rotate DISPLAY=HDMI-A-1` |
 
 ---
 
@@ -155,6 +173,27 @@ echo $XDG_SESSION_TYPE   # wayland or x11
 ```bash
 systemctl --user status kiosk
 journalctl --user -u kiosk -f
+```
+
+---
+
+## Plymouth (Boot Splash)
+
+Custom boot splash screen using Plymouth.
+
+```bash
+make install-plymouth   # Install
+make update-plymouth    # Update splash image
+```
+
+The theme uses `plymouth/splash.png` and scales it to fit the screen. Reboot required to see changes.
+
+**Test without rebooting**:
+```bash
+sudo plymouthd --debug --tty=/dev/tty1
+sudo plymouth show-splash
+sleep 5
+sudo plymouth quit
 ```
 
 ---
