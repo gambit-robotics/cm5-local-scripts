@@ -15,14 +15,14 @@ help:
 	@echo "  make deploy          Bundle + upload to dpaste, prints URL"
 	@echo ""
 	@echo "On Pi - Install (after extracting bundle):"
-	@echo "  make install-all DISPLAY=HDMI-A-1    Install everything"
+	@echo "  make install-all DISPLAY=DSI-2    Install everything"
 	@echo "  make install-kiosk                   Install kiosk only"
 	@echo "  make install-plymouth                Install boot splash only"
 	@echo "  make install-config                  Install boot/audio config only"
 	@echo "  make uninstall                       Remove all installed components"
 	@echo ""
 	@echo "On Pi - Update (redeploy + restart service):"
-	@echo "  make update-rotate DISPLAY=HDMI-A-1  Update rotate script"
+	@echo "  make update-rotate DISPLAY=DSI-2  Update rotate script"
 	@echo "  make update-kiosk                    Update kiosk config"
 	@echo "  make update-buttons                  Update buttons script"
 	@echo "  make update-plymouth                 Update boot splash"
@@ -59,7 +59,7 @@ ifeq ($(USER),)
 	$(error USER could not be detected. Run with sudo or set USER=<username>)
 endif
 ifndef DISPLAY
-	$(error DISPLAY is required. Usage: make install-all DISPLAY=HDMI-A-1)
+	$(error DISPLAY is required. Usage: make install-all DISPLAY=DSI-2)
 endif
 	@echo "Installing for user: $(USER)"
 	sudo ./install.sh --all $(USER) $(DISPLAY) $(TOUCH)
@@ -89,7 +89,7 @@ ifeq ($(USER),)
 	$(error USER could not be detected. Run with sudo or set USER=<username>)
 endif
 ifndef DISPLAY
-	$(error DISPLAY is required. Usage: make install-rotate DISPLAY=HDMI-A-1)
+	$(error DISPLAY is required. Usage: make install-rotate DISPLAY=DSI-2)
 endif
 	@echo "Installing for user: $(USER)"
 	sudo ./install.sh --no-safety --rotate $(USER) $(DISPLAY) $(TOUCH)
@@ -109,7 +109,7 @@ ifeq ($(USER),)
 	$(error USER could not be detected. Run with sudo or set USER=<username>)
 endif
 ifndef DISPLAY
-	$(error DISPLAY is required. Usage: make update-rotate DISPLAY=HDMI-A-1)
+	$(error DISPLAY is required. Usage: make update-rotate DISPLAY=DSI-2)
 endif
 	@echo "=== Updating rotate for $(USER) ==="
 	sudo ./rotate/setup-autorotate.sh $(USER) $(DISPLAY) $(TOUCH)

@@ -164,6 +164,12 @@ echo "  sudo plymouthd --debug --tty=/dev/tty1"
 echo "  sudo plymouth show-splash"
 echo "  sleep 5"
 echo "  sudo plymouth quit"
+# Prevent Plymouth from auto-quitting (kiosk will send quit signal)
+# Mask both quit services so splash stays visible until kiosk is ready
+print_status "Configuring Plymouth to wait for kiosk..."
+systemctl mask plymouth-quit.service 2>/dev/null || true
+systemctl mask plymouth-quit-wait.service 2>/dev/null || true
+
 echo ""
 echo "Reboot to see your new boot splash:"
 echo "  sudo reboot"

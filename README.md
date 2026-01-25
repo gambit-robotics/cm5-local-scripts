@@ -22,11 +22,11 @@ Run `make` to see all available commands:
 ```bash
 make              # Show help
 make deploy       # Bundle + upload to dpaste (macOS)
-make install-all DISPLAY=HDMI-A-1   # Install everything (Pi)
-make update-rotate DISPLAY=HDMI-A-1 # Update single module (Pi)
+make install-all DISPLAY=DSI-2      # Install everything (Pi)
+make update-rotate DISPLAY=DSI-2    # Update single module (Pi)
 ```
 
-User is auto-detected from `sudo`. Override with `USER=<name>` if needed.
+User is auto-detected from `sudo`. Override with `USER=gambitadmin` if needed.
 
 ---
 
@@ -36,17 +36,17 @@ The `install.sh` script supports modular installation. Use `make` targets or cal
 
 ```bash
 # Install everything (user auto-detected)
-make install-all DISPLAY=HDMI-A-1
+make install-all DISPLAY=DSI-2
 
 # Or call install.sh directly
-sudo ./install.sh --all <username> <display-output>
+sudo ./install.sh --all gambitadmin DSI-2
 
 # Individual modules
 make install-kiosk
 make install-plymouth
 make install-config
 make install-buttons
-make install-rotate DISPLAY=HDMI-A-1
+make install-rotate DISPLAY=DSI-2
 
 # Show help
 sudo ./install.sh --help
@@ -76,7 +76,7 @@ cd /tmp/cm5-local-scripts
 wlr-randr | grep -E "^[A-Z]"
 
 # Install everything (user auto-detected)
-make install-all DISPLAY=HDMI-A-1
+make install-all DISPLAY=DSI-2
 
 # Reboot
 sudo reboot
@@ -88,8 +88,8 @@ sudo reboot
 # Re-deploy bundle, then on Pi:
 curl -sL <URL>.txt | base64 -d | tar xzf - -C /tmp
 cd /tmp/cm5-local-scripts
-make update-rotate DISPLAY=HDMI-A-1   # Redeploys + restarts service
-make update-kiosk                      # No reboot needed
+make update-rotate DISPLAY=DSI-2      # Redeploys + restarts service
+make update-kiosk                     # No reboot needed
 ```
 
 ### Quick reference
@@ -99,8 +99,8 @@ make update-kiosk                      # No reboot needed
 | Deploy bundle | `make deploy` (Mac) |
 | Download | `curl -sL <URL>.txt \| base64 -d \| tar xzf - -C /tmp` |
 | Find display | `wlr-randr \| grep -E "^[A-Z]"` |
-| Install all | `make install-all DISPLAY=HDMI-A-1` |
-| Update module | `make update-rotate DISPLAY=HDMI-A-1` |
+| Install all | `make install-all DISPLAY=DSI-2` |
+| Update module | `make update-rotate DISPLAY=DSI-2` |
 
 ---
 
@@ -113,7 +113,7 @@ I2C volume control using Arduino Modulino Buttons (ABX00110).
 base64 < buttons/setup-buttons.sh | pbcopy
 # On Pi:
 echo 'BASE64' | base64 -d > /tmp/setup-buttons.sh
-sudo /tmp/setup-buttons.sh <username>
+sudo /tmp/setup-buttons.sh gambitadmin
 ```
 
 | Button | Action |
@@ -140,7 +140,7 @@ Rotate display + touch (0°/180°) using LIS3DH accelerometer.
 base64 < rotate/setup-autorotate.sh | pbcopy
 # On Pi:
 echo 'BASE64' | base64 -d > /tmp/setup-autorotate.sh
-sudo /tmp/setup-autorotate.sh <username> <display-output> [touch-device]
+sudo /tmp/setup-autorotate.sh gambitadmin DSI-2
 ```
 
 **Find display output**: `wlr-randr`
@@ -162,7 +162,7 @@ Chromium fullscreen kiosk mode.
 base64 < kiosk/setup-kiosk-wayland.sh | pbcopy
 # On Pi:
 echo 'BASE64' | base64 -d > /tmp/setup-kiosk.sh
-sudo /tmp/setup-kiosk.sh <username>
+sudo /tmp/setup-kiosk.sh gambitadmin
 ```
 
 **Check display server**:
@@ -322,12 +322,12 @@ pytest tests/ -v
 sudo ./uninstall.sh
 
 # Uninstall specific modules
-sudo ./uninstall.sh --buttons <username>
-sudo ./uninstall.sh --rotate <username>
-sudo ./uninstall.sh --kiosk <username>
+sudo ./uninstall.sh --buttons gambitadmin
+sudo ./uninstall.sh --rotate gambitadmin
+sudo ./uninstall.sh --kiosk gambitadmin
 
 # Uninstall everything
-sudo ./uninstall.sh --all <username>
+sudo ./uninstall.sh --all gambitadmin
 
 # Show help
 sudo ./uninstall.sh --help

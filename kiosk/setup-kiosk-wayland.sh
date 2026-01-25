@@ -60,9 +60,13 @@ done
 pkill -u "$(whoami)" -f "chromium.*user-data-dir=/tmp/chromium-kiosk" 2>/dev/null || true
 sleep 1
 
+# Signal Plymouth to quit - we're ready to show the kiosk
+/usr/bin/plymouth quit 2>/dev/null || true
+
 echo "Launching Chromium kiosk on Wayland..."
 exec chromium \
     --ozone-platform=wayland \
+    --touch-events=enabled \
     --password-store=basic \
     --noerrdialogs \
     --disable-infobars \

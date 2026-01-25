@@ -1,27 +1,40 @@
 #!/bin/bash
 set -euo pipefail
 
-# Auto-rotate display + touch (0°/180°) using LIS3DH on Raspberry Pi OS Bookworm
-# Usage: sudo ./setup-autorotate.sh <username> <display-output> [touch-device-name]
+# Auto-rotate display (0°/180°) using LIS3DH accelerometer on Raspberry Pi OS Bookworm
+# Touch mapping is handled by labwc rc.xml mapToOutput - NOT by this script
+# Usage: sudo ./setup-autorotate.sh <username> <display-output>
 
 die() { echo "Error: $*" >&2; exit 1; }
 
 # Validate
 [[ $EUID -eq 0 ]] || die "Run with sudo"
-[[ -n "${1:-}" && -n "${2:-}" ]] || die "Usage: $0 <username> <display-output> [touch-device-name]"
+[[ -n "${1:-}" && -n "${2:-}" ]] || die "Usage: $0 <username> <display-output>"
 id "$1" &>/dev/null || die "User '$1' does not exist"
 
 USER_NAME="$1"
 USER_HOME=$(getent passwd "$USER_NAME" | cut -d: -f6)
 OUTPUT_NAME="$2"
-TOUCH_DEVICE="${3:-}"
 PY_SCRIPT="$USER_HOME/rotate-screen.py"
 SERVICE_DIR="$USER_HOME/.config/systemd/user"
 SERVICE_FILE="$SERVICE_DIR/autorotate.service"
-UDEV_RULE="/etc/udev/rules.d/99-touch-rotation.rules"
 USER_ID=$(id -u "$USER_NAME")
 
-echo "Setting up auto-rotate for $USER_NAME on $OUTPUT_NAME"
+echo "Setting up display auto-rotate for $USER_NAME on $OUTPUT_NAME"
+
+# Cleanup: Remove old touch udev rules and sudoers entries from previous versions
+# This ensures idempotency and removes the double-transform issue
+OLD_UDEV_RULE="/etc/udev/rules.d/99-touch-rotation.rules"
+OLD_SUDOERS="/etc/sudoers.d/autorotate"
+if [[ -f "$OLD_UDEV_RULE" ]]; then
+    echo "Removing old touch udev rule (no longer needed)..."
+    rm -f "$OLD_UDEV_RULE"
+    udevadm control --reload-rules
+fi
+if [[ -f "$OLD_SUDOERS" ]]; then
+    echo "Removing old sudoers entry (no longer needed)..."
+    rm -f "$OLD_SUDOERS"
+fi
 
 # Install packages (skip apt-get update if called from unified installer)
 if [[ "${SKIP_APT_UPDATE:-}" != "1" ]]; then
@@ -33,47 +46,24 @@ pip3 install --quiet --break-system-packages adafruit-circuitpython-lis3dh
 # Add user to i2c group
 getent group i2c &>/dev/null && usermod -aG i2c "$USER_NAME"
 
-# Auto-detect touch device if not provided
-if [[ -z "$TOUCH_DEVICE" ]]; then
-    echo "No touch device specified, attempting auto-detect..."
-    TOUCH_DEVICE=$(libinput list-devices 2>/dev/null | grep -A1 "Touchscreen\|Touch" | grep "Device:" | head -1 | sed 's/.*Device: *//' || true)
-    if [[ -n "$TOUCH_DEVICE" ]]; then
-        echo "Detected touch device: $TOUCH_DEVICE"
-    else
-        echo "Warning: No touch device detected. Touch rotation disabled."
-    fi
-fi
-
-# Create udev rule for touch rotation (if touch device found)
-if [[ -n "$TOUCH_DEVICE" ]]; then
-    echo "Creating udev rule for touch rotation..."
-    cat > "$UDEV_RULE" <<EOF
-# Auto-rotate touch input - managed by setup-autorotate.sh
-# Normal orientation (0°)
-ACTION=="add|change", SUBSYSTEM=="input", ATTRS{name}=="$TOUCH_DEVICE", ENV{LIBINPUT_CALIBRATION_MATRIX}="1 0 0 0 1 0"
-EOF
-    udevadm control --reload-rules
-    
-    # Allow user to update udev rules without password
-    echo "$USER_NAME ALL=(root) NOPASSWD: /usr/bin/tee $UDEV_RULE, /usr/bin/udevadm" > /etc/sudoers.d/autorotate
-    chmod 440 /etc/sudoers.d/autorotate
-fi
-
-# Create rotation script
+# Create rotation script (display only - no touch calibration)
+# Note: Touch input is mapped via labwc rc.xml <touch mapToOutput="..."/>
+# which automatically handles coordinate transformation when display rotates.
+# Do NOT use LIBINPUT_CALIBRATION_MATRIX - it causes double-inversion.
 cat > "$PY_SCRIPT" <<'PYEOF'
 #!/usr/bin/env python3
+"""
+Auto-rotate display based on LIS3DH accelerometer readings.
+Only rotates display output via wlr-randr.
+Touch mapping is handled by labwc mapToOutput (not here).
+"""
 import os, sys, time, subprocess, logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 log = logging.getLogger()
 
-OUTPUT = os.environ.get("DISPLAY_OUTPUT", "HDMI-A-1")
-TOUCH_DEVICE = os.environ.get("TOUCH_DEVICE", "")
-UDEV_RULE = "/etc/udev/rules.d/99-touch-rotation.rules"
+OUTPUT = os.environ.get("DISPLAY_OUTPUT", "DSI-2")
 DEADBAND, HOLD_COUNT, POLL = 2.0, 3, 0.25
-
-MATRIX_0 = "1 0 0 0 1 0"
-MATRIX_180 = "-1 0 1 0 -1 1"
 
 try:
     import board, busio, adafruit_lis3dh
@@ -82,32 +72,33 @@ except Exception as e:
     log.error(f"Accelerometer init failed: {e}")
     sys.exit(1)
 
-log.info(f"Started: display={OUTPUT}, touch={TOUCH_DEVICE or 'none'}")
+log.info(f"Started: display={OUTPUT} (touch handled by labwc mapToOutput)")
 last, stable, count = None, None, 0
 
 def set_rotation(rot):
+    """Rotate display only. Touch follows via labwc mapToOutput."""
     transform = "normal" if rot == 0 else "180"
     subprocess.run(["wlr-randr", "--output", OUTPUT, "--transform", transform], check=False)
-    if TOUCH_DEVICE:
-        matrix = MATRIX_0 if rot == 0 else MATRIX_180
-        rule = f'# Auto-rotate touch - current: {rot}°\nACTION=="add|change", SUBSYSTEM=="input", ATTRS{{name}}=="{TOUCH_DEVICE}", ENV{{LIBINPUT_CALIBRATION_MATRIX}}="{matrix}"\n'
-        subprocess.run(f'echo \'{rule}\' | sudo tee {UDEV_RULE} >/dev/null', shell=True, check=False)
-        subprocess.run(["sudo", "udevadm", "control", "--reload-rules"], check=False)
-        subprocess.run(["sudo", "udevadm", "trigger"], check=False)
-    log.info(f"Rotated to {rot}°")
+    log.info(f"Display rotated to {rot}°")
 
-def wait_for_display(timeout=30):
-    """Wait for Wayland display to be ready"""
-    for _ in range(timeout):
-        result = subprocess.run(["wlr-randr"], capture_output=True)
-        if result.returncode == 0:
-            return True
+def wait_for_display():
+    """Wait for Wayland display to be ready - no timeout, keeps trying"""
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            result = subprocess.run(["wlr-randr"], capture_output=True, timeout=2)
+            if result.returncode == 0:
+                log.info(f"Display ready after {attempt} attempts")
+                return True
+        except subprocess.TimeoutExpired:
+            pass
+        if attempt % 30 == 0:
+            log.info(f"Still waiting for display... ({attempt}s)")
         time.sleep(1)
-    return False
 
-# Wait for display before setting initial rotation
-if not wait_for_display():
-    log.error("Display not ready after timeout")
+# Wait for display before setting initial rotation (waits forever)
+wait_for_display()
 
 # Set initial rotation (use reading if clear, else default to 0°)
 try:
@@ -132,20 +123,20 @@ while True:
         # If screen is upside-down in either position, flip the condition on next line
         z = accel.acceleration[0]
         target = None if abs(z) < DEADBAND else (180 if z > 0 else 0)
-        
+
         if target is None:
             stable, count = None, 0
         elif target == stable:
             count += 1
         else:
             stable, count = target, 1
-        
+
         if count >= HOLD_COUNT and target != last:
             set_rotation(target)
             last = target
     except Exception as e:
         log.error(f"Read error: {e}")
-    
+
     time.sleep(POLL)
 PYEOF
 
@@ -156,12 +147,11 @@ chown "$USER_NAME:$USER_NAME" "$PY_SCRIPT"
 install -d -o "$USER_NAME" -g "$USER_NAME" "$SERVICE_DIR"
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=Auto-rotate display and touch using accelerometer
+Description=Auto-rotate display using accelerometer
 After=graphical-session.target
 
 [Service]
 Environment=DISPLAY_OUTPUT=$OUTPUT_NAME
-Environment=TOUCH_DEVICE=$TOUCH_DEVICE
 Environment=WAYLAND_DISPLAY=wayland-0
 Environment=XDG_RUNTIME_DIR=/run/user/$USER_ID
 ExecStartPre=/bin/sleep 3
@@ -180,4 +170,7 @@ sudo -u "$USER_NAME" XDG_RUNTIME_DIR="/run/user/$USER_ID" \
 sudo -u "$USER_NAME" XDG_RUNTIME_DIR="/run/user/$USER_ID" \
     systemctl --user enable autorotate.service
 
-echo "Done. Reboot to activate."
+echo ""
+echo "Done. Display auto-rotate configured for $OUTPUT_NAME"
+echo "Note: Touch mapping relies on labwc rc.xml mapToOutput - no udev rules needed."
+echo "Reboot to activate."
