@@ -1,4 +1,4 @@
-# Gambit Safety Scripts
+# Gambit CM5 Scripts
 
 Raspberry Pi setup scripts and systemd services for kiosk displays, hardware monitoring, and peripheral control.
 
