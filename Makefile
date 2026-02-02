@@ -22,7 +22,7 @@ help:
 	@echo "  make uninstall                       Remove all installed components"
 	@echo ""
 	@echo "On Pi - Update (redeploy + restart service):"
-	@echo "  make update-rotate DISPLAY=DSI-2  Update rotate script"
+	@echo "  make update-rotate DISPLAY=DSI-2  Update rotate script (DEPRECATED)"
 	@echo "  make update-kiosk                    Update kiosk config"
 	@echo "  make update-buttons                  Update buttons script"
 	@echo "  make update-plymouth                 Update boot splash"
@@ -85,6 +85,7 @@ endif
 	sudo ./install.sh --no-safety --buttons $(USER)
 
 install-rotate:
+	@echo "WARNING: Auto-rotate is DEPRECATED. Use https://github.com/gambit-robotics/viam-accelerometer instead."
 ifeq ($(USER),)
 	$(error USER could not be detected. Run with sudo or set USER=<username>)
 endif
@@ -105,6 +106,7 @@ uninstall:
 # ------------------------------------------------------------------------------
 
 update-rotate:
+	@echo "WARNING: Auto-rotate is DEPRECATED. Use https://github.com/gambit-robotics/viam-accelerometer instead."
 ifeq ($(USER),)
 	$(error USER could not be detected. Run with sudo or set USER=<username>)
 endif

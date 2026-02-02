@@ -9,10 +9,9 @@ Raspberry Pi setup scripts and systemd services for kiosk displays, hardware mon
 | Module | Purpose | Scripts |
 |--------|---------|---------|
 | [buttons/](buttons/) | I2C volume control buttons | `setup-buttons.sh` |
-| [rotate/](rotate/) | Auto-rotate display via accelerometer | `setup-autorotate.sh` |
+| [rotate/](rotate/) | **DEPRECATED** - Use [viam-accelerometer](https://github.com/gambit-robotics/viam-accelerometer) | `setup-autorotate.sh` |
 | [kiosk/](kiosk/) | Chromium fullscreen kiosk | `setup-kiosk-wayland.sh`, `setup-kiosk-x11.sh` |
 | [plymouth/](plymouth/) | Custom boot splash screen | `setup-bootsplash.sh` |
-| [scripts/](scripts/) | Safety monitoring daemons | `pct2075_safety.py`, `ina219_safety.py` |
 | [config/](config/) | Pi boot & audio configs | `config.txt`, `asound.conf` |
 
 ## Quick Start
@@ -23,7 +22,7 @@ Run `make` to see all available commands:
 make              # Show help
 make deploy       # Bundle + upload to dpaste (macOS)
 make install-all DISPLAY=DSI-2      # Install everything (Pi)
-make update-rotate DISPLAY=DSI-2    # Update single module (Pi)
+make update-kiosk                   # Update single module (Pi)
 ```
 
 User is auto-detected from `sudo`. Override with `USER=gambitadmin` if needed.
@@ -46,7 +45,7 @@ make install-kiosk
 make install-plymouth
 make install-config
 make install-buttons
-make install-rotate DISPLAY=DSI-2
+make install-rotate DISPLAY=DSI-2  # DEPRECATED
 
 # Show help
 sudo ./install.sh --help
@@ -88,7 +87,7 @@ sudo reboot
 # Re-deploy bundle, then on Pi:
 curl -sL <URL>.txt | base64 -d | tar xzf - -C /tmp
 cd /tmp/cm5-local-scripts
-make update-rotate DISPLAY=DSI-2      # Redeploys + restarts service
+make update-rotate DISPLAY=DSI-2      # DEPRECATED - use viam-accelerometer
 make update-kiosk                     # No reboot needed
 ```
 
@@ -100,7 +99,7 @@ make update-kiosk                     # No reboot needed
 | Download | `curl -sL <URL>.txt \| base64 -d \| tar xzf - -C /tmp` |
 | Find display | `wlr-randr \| grep -E "^[A-Z]"` |
 | Install all | `make install-all DISPLAY=DSI-2` |
-| Update module | `make update-rotate DISPLAY=DSI-2` |
+| Update module | `make update-kiosk` (rotate deprecated) |
 
 ---
 
@@ -131,25 +130,9 @@ journalctl --user -u buttons -f
 
 ---
 
-## Auto-Rotate
+## Auto-Rotate (DEPRECATED)
 
-Rotate display + touch (0°/180°) using LIS3DH accelerometer.
-
-```bash
-# Deploy
-base64 < rotate/setup-autorotate.sh | pbcopy
-# On Pi:
-echo 'BASE64' | base64 -d > /tmp/setup-autorotate.sh
-sudo /tmp/setup-autorotate.sh gambitadmin DSI-2
-```
-
-**Find display output**: `wlr-randr`
-**Find touch device**: `libinput list-devices | grep -A1 Touch`
-
-```bash
-systemctl --user status autorotate
-journalctl --user -u autorotate -f
-```
+> **DEPRECATED**: This module is deprecated. Use [gambit-robotics/viam-accelerometer](https://github.com/gambit-robotics/viam-accelerometer) instead, which provides accelerometer-based rotation as a Viam module.
 
 ---
 
@@ -225,67 +208,10 @@ echo 'BASE64' | base64 -d | sudo tee /etc/asound.conf
 
 ---
 
-## Safety Monitoring
-
-Standalone systemd services that monitor hardware sensors via I2C and trigger graceful shutdown when thresholds are exceeded. Runs independently of Viam.
-
-| Script | Sensor | Purpose |
-|--------|--------|---------|
-| `pct2075_safety.py` | PCT2075 | Ambient temperature |
-| `ina219_safety.py` | INA219 | UPS battery level |
-
-### Installation
-
-```bash
-sudo ./install.sh
-```
-
-### Configuration
-
-Edit `/etc/gambit/safety-config.yaml`:
-
-```yaml
-pct2075:
-  i2c_address: 0x37
-  warning_temp_c: 70
-  shutdown_temp_c: 80
-  poll_interval_s: 5
-
-ina219:
-  i2c_address: 0x41
-  warning_battery_percent: 15
-  shutdown_battery_percent: 5
-  poll_interval_s: 10
-  battery_cell_count: 3
-```
-
-```bash
-sudo systemctl restart pct2075-safety ina219-safety
-```
-
-### Behavior
-
-1. Poll sensor at configured interval
-2. Log readings to journald
-3. At warning threshold: log warning (once)
-4. At shutdown threshold: `shutdown -h +1 "Safety shutdown: <reason>"`
-
-**Error handling**: After 5 consecutive I2C failures, logs critical but does NOT shutdown (hardware may be disconnected).
-
-```bash
-sudo systemctl status pct2075-safety
-journalctl -u pct2075-safety -f
-```
-
----
-
 ## File Locations
 
 | Type | Location |
 |------|----------|
-| Safety scripts | `/opt/gambit/safety/` |
-| Safety config | `/etc/gambit/safety-config.yaml` |
-| Safety services | `/etc/systemd/system/*.service` |
 | User scripts | `$HOME/*.py`, `$HOME/*.sh` |
 | User services | `$HOME/.config/systemd/user/*.service` |
 
@@ -306,21 +232,9 @@ i2cdetect -y 1
 
 ---
 
-## Testing
-
-```bash
-pip install pytest pyyaml
-pytest tests/ -v
-```
-
----
-
 ## Uninstall
 
 ```bash
-# Safety monitoring only (default)
-sudo ./uninstall.sh
-
 # Uninstall specific modules
 sudo ./uninstall.sh --buttons gambitadmin
 sudo ./uninstall.sh --rotate gambitadmin
