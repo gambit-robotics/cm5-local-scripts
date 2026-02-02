@@ -1,1 +1,0 @@
-# Gambit Safety Scripts Tests

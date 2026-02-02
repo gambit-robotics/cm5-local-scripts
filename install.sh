@@ -38,7 +38,7 @@ Modules:
   (default)         Install safety monitoring services only
   --config          Install boot config & audio config (requires reboot)
   --buttons         Install I2C volume button controller
-  --rotate          Install auto-rotate (requires display-output arg)
+  --rotate          Install auto-rotate (DEPRECATED - use viam-accelerometer)
   --kiosk           Install Chromium kiosk (auto-detects display server)
   --kiosk-wayland   Install Wayland kiosk explicitly
   --kiosk-x11       Install X11 kiosk explicitly
@@ -77,7 +77,7 @@ while [[ $# -gt 0 ]]; do
         --kiosk-wayland) INSTALL_KIOSK=true; KIOSK_TYPE="wayland"; shift ;;
         --kiosk-x11) INSTALL_KIOSK=true; KIOSK_TYPE="x11"; shift ;;
         --plymouth) INSTALL_PLYMOUTH=true; shift ;;
-        --all) INSTALL_CONFIG=true; INSTALL_BUTTONS=true; INSTALL_ROTATE=true; INSTALL_KIOSK=true; INSTALL_PLYMOUTH=true; shift ;;
+        --all) INSTALL_CONFIG=true; INSTALL_BUTTONS=true; INSTALL_KIOSK=true; INSTALL_PLYMOUTH=true; shift ;;
         --no-safety) INSTALL_SAFETY=false; shift ;;
         -*)
             die "Unknown option: $1. Use --help for usage."
@@ -249,6 +249,10 @@ install_buttons() {
 install_rotate() {
     echo ""
     echo "=== Installing Auto-Rotate for $TARGET_USER ==="
+    echo ""
+    echo "WARNING: Auto-rotate is DEPRECATED and no longer maintained."
+    echo "         Please use https://github.com/gambit-robotics/viam-accelerometer instead."
+    echo ""
     if [[ -n "$TOUCH_DEVICE" ]]; then
         "$SCRIPT_DIR/rotate/setup-autorotate.sh" "$TARGET_USER" "$DISPLAY_OUTPUT" "$TOUCH_DEVICE"
     else

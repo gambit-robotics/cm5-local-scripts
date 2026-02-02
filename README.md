@@ -9,7 +9,7 @@ Raspberry Pi setup scripts and systemd services for kiosk displays, hardware mon
 | Module | Purpose | Scripts |
 |--------|---------|---------|
 | [buttons/](buttons/) | I2C volume control buttons | `setup-buttons.sh` |
-| [rotate/](rotate/) | Auto-rotate display via accelerometer | `setup-autorotate.sh` |
+| [rotate/](rotate/) | **DEPRECATED** - Use [viam-accelerometer](https://github.com/gambit-robotics/viam-accelerometer) | `setup-autorotate.sh` |
 | [kiosk/](kiosk/) | Chromium fullscreen kiosk | `setup-kiosk-wayland.sh`, `setup-kiosk-x11.sh` |
 | [plymouth/](plymouth/) | Custom boot splash screen | `setup-bootsplash.sh` |
 | [scripts/](scripts/) | Safety monitoring daemons | `pct2075_safety.py`, `ina219_safety.py` |
@@ -23,7 +23,7 @@ Run `make` to see all available commands:
 make              # Show help
 make deploy       # Bundle + upload to dpaste (macOS)
 make install-all DISPLAY=DSI-2      # Install everything (Pi)
-make update-rotate DISPLAY=DSI-2    # Update single module (Pi)
+make update-kiosk                   # Update single module (Pi)
 ```
 
 User is auto-detected from `sudo`. Override with `USER=gambitadmin` if needed.
@@ -46,7 +46,7 @@ make install-kiosk
 make install-plymouth
 make install-config
 make install-buttons
-make install-rotate DISPLAY=DSI-2
+make install-rotate DISPLAY=DSI-2  # DEPRECATED
 
 # Show help
 sudo ./install.sh --help
@@ -88,7 +88,7 @@ sudo reboot
 # Re-deploy bundle, then on Pi:
 curl -sL <URL>.txt | base64 -d | tar xzf - -C /tmp
 cd /tmp/cm5-local-scripts
-make update-rotate DISPLAY=DSI-2      # Redeploys + restarts service
+make update-rotate DISPLAY=DSI-2      # DEPRECATED - use viam-accelerometer
 make update-kiosk                     # No reboot needed
 ```
 
@@ -100,7 +100,7 @@ make update-kiosk                     # No reboot needed
 | Download | `curl -sL <URL>.txt \| base64 -d \| tar xzf - -C /tmp` |
 | Find display | `wlr-randr \| grep -E "^[A-Z]"` |
 | Install all | `make install-all DISPLAY=DSI-2` |
-| Update module | `make update-rotate DISPLAY=DSI-2` |
+| Update module | `make update-kiosk` (rotate deprecated) |
 
 ---
 
@@ -131,25 +131,9 @@ journalctl --user -u buttons -f
 
 ---
 
-## Auto-Rotate
+## Auto-Rotate (DEPRECATED)
 
-Rotate display + touch (0°/180°) using LIS3DH accelerometer.
-
-```bash
-# Deploy
-base64 < rotate/setup-autorotate.sh | pbcopy
-# On Pi:
-echo 'BASE64' | base64 -d > /tmp/setup-autorotate.sh
-sudo /tmp/setup-autorotate.sh gambitadmin DSI-2
-```
-
-**Find display output**: `wlr-randr`
-**Find touch device**: `libinput list-devices | grep -A1 Touch`
-
-```bash
-systemctl --user status autorotate
-journalctl --user -u autorotate -f
-```
+> **DEPRECATED**: This module is deprecated. Use [gambit-robotics/viam-accelerometer](https://github.com/gambit-robotics/viam-accelerometer) instead, which provides accelerometer-based rotation as a Viam module.
 
 ---
 

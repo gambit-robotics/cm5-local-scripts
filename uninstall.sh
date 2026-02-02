@@ -31,7 +31,7 @@ Usage: sudo ./uninstall.sh [OPTIONS] [<username>]
 Modules:
   (default)         Uninstall safety monitoring services only
   --buttons         Uninstall I2C volume button controller
-  --rotate          Uninstall auto-rotate
+  --rotate          Uninstall auto-rotate (DEPRECATED)
   --kiosk           Uninstall Chromium kiosk
   --all             Uninstall all modules
   --no-safety       Skip safety services (use with other modules)
@@ -189,6 +189,7 @@ uninstall_buttons() {
 uninstall_rotate() {
     echo ""
     echo "=== Uninstalling Auto-Rotate for $TARGET_USER ==="
+    echo "Note: Auto-rotate is deprecated. Use https://github.com/gambit-robotics/viam-accelerometer instead."
 
     local service_dir="$USER_HOME/.config/systemd/user"
 

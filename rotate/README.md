@@ -1,5 +1,9 @@
 # Raspberry Pi Auto-Rotate Display + Touch (0° / 180°)
 
+> **DEPRECATED**: This module is deprecated and no longer maintained. Please use [gambit-robotics/viam-accelerometer](https://github.com/gambit-robotics/viam-accelerometer) instead, which provides accelerometer-based screen rotation as a Viam module with better integration and support.
+
+---
+
 Automatically rotate a Raspberry Pi display **and touchscreen** between **0° (normal)** and **180° (upside down)** using an **I2C accelerometer**.
 
 Designed for **Raspberry Pi OS Bookworm (Wayland)**.
