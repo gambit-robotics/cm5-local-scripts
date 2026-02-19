@@ -10,7 +10,7 @@ Raspberry Pi setup scripts and systemd services for kiosk displays, hardware mon
 |--------|---------|---------|
 | [buttons/](buttons/) | I2C volume control buttons | `setup-buttons.sh` |
 | [rotate/](rotate/) | **DEPRECATED** - Use [viam-accelerometer](https://github.com/gambit-robotics/viam-accelerometer) | `setup-autorotate.sh` |
-| [kiosk/](kiosk/) | Chromium fullscreen kiosk | `setup-kiosk-wayland.sh`, `setup-kiosk-x11.sh` |
+| [kiosk/](kiosk/) | Chromium fullscreen kiosk | `setup-kiosk-wayland.sh` |
 | [plymouth/](plymouth/) | Custom boot splash screen | `setup-bootsplash.sh` |
 | [config/](config/) | Pi boot & audio configs | `config.txt`, `asound.conf` |
 
@@ -146,11 +146,6 @@ base64 < kiosk/setup-kiosk-wayland.sh | pbcopy
 # On Pi:
 echo 'BASE64' | base64 -d > /tmp/setup-kiosk.sh
 sudo /tmp/setup-kiosk.sh gambitadmin
-```
-
-**Check display server**:
-```bash
-echo $XDG_SESSION_TYPE   # wayland or x11
 ```
 
 ```bash

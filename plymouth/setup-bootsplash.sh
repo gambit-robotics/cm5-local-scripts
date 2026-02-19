@@ -8,7 +8,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 THEME_NAME="${1:-gambit}"
-SPLASH_IMAGE="${2:-${SCRIPT_DIR}/splash.png}"
+SPLASH_IMAGE="${2:-${SCRIPT_DIR}/SplashLoading.png}"
+SHUTDOWN_IMAGE="${3:-${SCRIPT_DIR}/SplashShutdown.png}"
 THEME_DIR="/usr/share/plymouth/themes/${THEME_NAME}"
 
 # Colors for output
@@ -62,23 +63,37 @@ apt-get install -y plymouth plymouth-themes
 print_status "Creating theme directory: ${THEME_DIR}"
 mkdir -p "${THEME_DIR}"
 
-# Step 3: Copy splash image
-print_status "Copying splash image..."
+# Step 3: Copy splash images
+print_status "Copying splash images..."
 cp "${SPLASH_IMAGE}" "${THEME_DIR}/splash.png"
+if [[ -f "$SHUTDOWN_IMAGE" ]]; then
+    cp "${SHUTDOWN_IMAGE}" "${THEME_DIR}/shutdown-splash.png"
+    print_status "Shutdown splash image copied."
+else
+    print_warning "No shutdown splash found at: $SHUTDOWN_IMAGE"
+    print_warning "Shutdown will reuse the boot splash image."
+    cp "${SPLASH_IMAGE}" "${THEME_DIR}/shutdown-splash.png"
+fi
 
 # Step 4: Create the theme script
 print_status "Creating theme script..."
 cat > "${THEME_DIR}/${THEME_NAME}.script" << 'EOF'
-# Plymouth theme script - scales image to fit screen
+# Plymouth theme script - shows boot or shutdown image based on mode
 
-wallpaper_image = Image("splash.png");
+status = Plymouth.GetMode();
+if (status == "shutdown" || status == "reboot") {
+    wallpaper_image = Image("shutdown-splash.png");
+} else {
+    wallpaper_image = Image("splash.png");
+}
+
 screen_width = Window.GetWidth();
 screen_height = Window.GetHeight();
 resized_wallpaper_image = wallpaper_image.Scale(screen_width, screen_height);
 wallpaper_sprite = Sprite(resized_wallpaper_image);
 wallpaper_sprite.SetZ(-100);
 
-# Hide password prompt styling (optional, keeps it minimal)
+# Hide password prompt styling
 fun password_dialogue_setup(message, bullets) {
     global.password_dialogue = 1;
 }
@@ -164,11 +179,35 @@ echo "  sudo plymouthd --debug --tty=/dev/tty1"
 echo "  sudo plymouth show-splash"
 echo "  sleep 5"
 echo "  sudo plymouth quit"
-# Prevent Plymouth from auto-quitting (kiosk will send quit signal)
-# Mask both quit services so splash stays visible until kiosk is ready
-print_status "Configuring Plymouth to wait for kiosk..."
-systemctl mask plymouth-quit.service 2>/dev/null || true
+
+# plymouth-quit.service must stay unmasked (lightdm has After= and Conflicts= on it)
+# plymouth-quit-wait.service must be masked: it blocks multi-user.target for ~85s due to
+# a circular dependency (lightdm needs multi-user.target, but plymouth-quit needs lightdm)
+print_status "Configuring Plymouth service ordering..."
+systemctl unmask plymouth-quit.service 2>/dev/null || true
 systemctl mask plymouth-quit-wait.service 2>/dev/null || true
+
+# Step 10: Create shutdown splash service
+print_status "Setting up shutdown splash service..."
+cat > /etc/systemd/system/plymouth-shutdown-splash.service << 'SVCEOF'
+[Unit]
+Description=Show Plymouth Splash on Shutdown
+DefaultDependencies=no
+Before=shutdown.target reboot.target halt.target
+After=final.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/plymouthd --mode=shutdown --tty=/dev/tty1
+ExecStart=/usr/bin/plymouth show-splash
+
+[Install]
+WantedBy=shutdown.target reboot.target halt.target
+SVCEOF
+
+systemctl daemon-reload
+systemctl enable plymouth-shutdown-splash.service
 
 echo ""
 echo "Reboot to see your new boot splash:"

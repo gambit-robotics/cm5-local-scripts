@@ -123,11 +123,7 @@ ifeq ($(USER),)
 	$(error USER could not be detected. Run with sudo or set USER=<username>)
 endif
 	@echo "=== Updating kiosk for $(USER) ==="
-	@if [ -f ./kiosk/setup-kiosk-wayland.sh ]; then \
-		sudo ./kiosk/setup-kiosk-wayland.sh $(USER); \
-	else \
-		sudo ./kiosk/setup-kiosk-x11.sh $(USER); \
-	fi
+	sudo ./kiosk/setup-kiosk-wayland.sh $(USER)
 	sudo -u $(USER) XDG_RUNTIME_DIR=/run/user/$$(id -u $(USER)) systemctl --user restart chromium-kiosk.service 2>/dev/null || true
 	@echo "Done. Service restarted."
 

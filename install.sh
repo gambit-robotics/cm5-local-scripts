@@ -18,7 +18,7 @@ INSTALL_BUTTONS=false
 INSTALL_ROTATE=false
 INSTALL_KIOSK=false
 INSTALL_PLYMOUTH=false
-KIOSK_TYPE=""  # "wayland", "x11", or "" (auto-detect)
+KIOSK_TYPE=""  # "wayland" or "" (auto-detect)
 
 # User module arguments
 TARGET_USER=""
@@ -39,9 +39,8 @@ Modules:
   --config          Install boot config & audio config (requires reboot)
   --buttons         Install I2C volume button controller
   --rotate          Install auto-rotate (DEPRECATED - use viam-accelerometer)
-  --kiosk           Install Chromium kiosk (auto-detects display server)
+  --kiosk           Install Chromium kiosk
   --kiosk-wayland   Install Wayland kiosk explicitly
-  --kiosk-x11       Install X11 kiosk explicitly
   --plymouth        Install custom boot splash screen
   --all             Install all modules (including config)
   --no-safety       Skip safety services (use with other modules)
@@ -75,7 +74,6 @@ while [[ $# -gt 0 ]]; do
         --rotate) INSTALL_ROTATE=true; shift ;;
         --kiosk) INSTALL_KIOSK=true; shift ;;
         --kiosk-wayland) INSTALL_KIOSK=true; KIOSK_TYPE="wayland"; shift ;;
-        --kiosk-x11) INSTALL_KIOSK=true; KIOSK_TYPE="x11"; shift ;;
         --plymouth) INSTALL_PLYMOUTH=true; shift ;;
         --all) INSTALL_CONFIG=true; INSTALL_BUTTONS=true; INSTALL_KIOSK=true; INSTALL_PLYMOUTH=true; shift ;;
         --no-safety) INSTALL_SAFETY=false; shift ;;
@@ -264,24 +262,7 @@ install_rotate() {
 # Module: Kiosk
 # ------------------------------------------------------------------------------
 detect_display_server() {
-    # Try to detect from user's session type
-    local session_type=""
-    session_type=$(sudo -u "$TARGET_USER" bash -c 'echo $XDG_SESSION_TYPE' 2>/dev/null || true)
-
-    if [[ "$session_type" == "wayland" ]]; then
-        echo "wayland"
-        return
-    elif [[ "$session_type" == "x11" ]]; then
-        echo "x11"
-        return
-    fi
-
-    # Fallback: check for wayland tools (Bookworm default is wayland)
-    if command -v wlr-randr &>/dev/null || command -v labwc &>/dev/null; then
-        echo "wayland"
-    else
-        echo "x11"
-    fi
+    echo "wayland"
 }
 
 install_kiosk() {
@@ -289,11 +270,7 @@ install_kiosk() {
     echo ""
     echo "=== Installing Kiosk ($display_type) for $TARGET_USER ==="
 
-    if [[ "$display_type" == "wayland" ]]; then
-        "$SCRIPT_DIR/kiosk/setup-kiosk-wayland.sh" "$TARGET_USER"
-    else
-        "$SCRIPT_DIR/kiosk/setup-kiosk-x11.sh" "$TARGET_USER"
-    fi
+    "$SCRIPT_DIR/kiosk/setup-kiosk-wayland.sh" "$TARGET_USER"
 }
 
 # ------------------------------------------------------------------------------

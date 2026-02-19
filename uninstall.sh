@@ -247,17 +247,6 @@ uninstall_kiosk() {
     fi
     rm -f "$service_dir/kiosk.service"
 
-    # Try system-level service (X11)
-    if systemctl is-active --quiet kiosk.service 2>/dev/null; then
-        echo "  Stopping kiosk system service..."
-        systemctl stop kiosk.service || true
-    fi
-    if systemctl is-enabled --quiet kiosk.service 2>/dev/null; then
-        echo "  Disabling kiosk system service..."
-        systemctl disable kiosk.service || true
-    fi
-    rm -f "$SYSTEMD_DIR/kiosk.service"
-
     # Remove kiosk script
     rm -f "$USER_HOME/start-kiosk.sh"
 
