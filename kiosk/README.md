@@ -114,6 +114,15 @@ Edit `~/start-kiosk.sh` to change:
 - Ensure your web server starts before the kiosk service
 - Adjust `MAX_WAIT` in `~/start-kiosk.sh` if needed
 
+**Need to access the desktop for debugging (no SSH/WiFi)**
+- Plug in a keyboard and press `Ctrl+Alt+F2` for a TTY login shell
+- To restore the full Raspberry Pi desktop:
+  ```bash
+  sudo cp /etc/xdg/labwc/autostart.bak /etc/xdg/labwc/autostart
+  sudo reboot
+  ```
+- To re-apply kiosk mode after, run `setup-kiosk-wayland.sh` again
+
 ---
 
 ## Deployment
