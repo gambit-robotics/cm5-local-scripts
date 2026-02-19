@@ -2,8 +2,6 @@
 
 Raspberry Pi setup scripts and systemd services for kiosk displays, hardware monitoring, and peripheral control.
 
-/cm5-local-scripts are developed but are neither tested nor deployed
-
 ## Modules
 
 | Module | Purpose | Scripts |
