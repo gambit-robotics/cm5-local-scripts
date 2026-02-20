@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # Files/dirs to bundle (excludes Python scripts and tests)
-DIRS=(config buttons rotate kiosk plymouth)
+DIRS=(config buttons kiosk plymouth)
 FILES=(install.sh uninstall.sh Makefile)
 
 $QUIET || echo "Bundling: ${FILES[*]} ${DIRS[*]}"

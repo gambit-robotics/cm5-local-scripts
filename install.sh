@@ -1,29 +1,22 @@
 #!/bin/bash
 #
 # Gambit Scripts Installer
-# Installs safety monitoring services and optional user modules (buttons, rotate, kiosk)
+# Installs user modules (buttons, kiosk, plymouth, config)
 #
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="/opt/gambit/safety"
-CONFIG_DIR="/etc/gambit"
-SYSTEMD_DIR="/etc/systemd/system"
 
 # Module flags (defaults)
-INSTALL_SAFETY=false
 INSTALL_CONFIG=false
 INSTALL_BUTTONS=false
-INSTALL_ROTATE=false
 INSTALL_KIOSK=false
 INSTALL_PLYMOUTH=false
 KIOSK_TYPE=""  # "wayland" or "" (auto-detect)
 
 # User module arguments
 TARGET_USER=""
-DISPLAY_OUTPUT=""
-TOUCH_DEVICE=""
 
 # ------------------------------------------------------------------------------
 # Help
@@ -32,30 +25,24 @@ show_help() {
     cat << 'EOF'
 Gambit Scripts Installer
 
-Usage: sudo ./install.sh [OPTIONS] [<username> [<display-output> [<touch-device>]]]
+Usage: sudo ./install.sh [OPTIONS] [<username>]
 
 Modules:
-  (default)         Install safety monitoring services only
   --config          Install boot config & audio config (requires reboot)
   --buttons         Install I2C volume button controller
-  --rotate          Install auto-rotate (DEPRECATED - use viam-accelerometer)
   --kiosk           Install Chromium kiosk
   --kiosk-wayland   Install Wayland kiosk explicitly
   --plymouth        Install custom boot splash screen
   --all             Install all modules (including config)
-  --no-safety       Skip safety services (use with other modules)
 
 Arguments (required for user-level modules):
   <username>        Target user for user-level services
-  <display-output>  Display output name for rotate (e.g., HDMI-A-1)
-  <touch-device>    Optional touch device name for rotate
 
 Examples:
-  sudo ./install.sh                           # Safety only (backwards compatible)
-  sudo ./install.sh --buttons pi              # Safety + buttons for user 'pi'
-  sudo ./install.sh --kiosk pi                # Safety + kiosk (auto-detect)
-  sudo ./install.sh --all pi HDMI-A-1         # All modules
-  sudo ./install.sh --no-safety --buttons pi  # Buttons only, no safety
+  sudo ./install.sh --buttons pi              # Buttons for user 'pi'
+  sudo ./install.sh --kiosk pi                # Kiosk (auto-detect)
+  sudo ./install.sh --all pi                  # All modules
+  sudo ./install.sh --config                  # Config only
 
 EOF
     exit 0
@@ -71,23 +58,17 @@ while [[ $# -gt 0 ]]; do
         --help|-h) show_help ;;
         --config) INSTALL_CONFIG=true; shift ;;
         --buttons) INSTALL_BUTTONS=true; shift ;;
-        --rotate) INSTALL_ROTATE=true; shift ;;
         --kiosk) INSTALL_KIOSK=true; shift ;;
         --kiosk-wayland) INSTALL_KIOSK=true; KIOSK_TYPE="wayland"; shift ;;
         --plymouth) INSTALL_PLYMOUTH=true; shift ;;
         --all) INSTALL_CONFIG=true; INSTALL_BUTTONS=true; INSTALL_KIOSK=true; INSTALL_PLYMOUTH=true; shift ;;
-        --no-safety) INSTALL_SAFETY=false; shift ;;
         -*)
             die "Unknown option: $1. Use --help for usage."
             ;;
         *)
-            # Positional arguments: username, display-output, touch-device
+            # Positional arguments: username
             if [[ -z "$TARGET_USER" ]]; then
                 TARGET_USER="$1"
-            elif [[ -z "$DISPLAY_OUTPUT" ]]; then
-                DISPLAY_OUTPUT="$1"
-            elif [[ -z "$TOUCH_DEVICE" ]]; then
-                TOUCH_DEVICE="$1"
             else
                 die "Too many arguments. Use --help for usage."
             fi
@@ -106,13 +87,8 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # User modules require a username
-if { $INSTALL_BUTTONS || $INSTALL_ROTATE || $INSTALL_KIOSK; } && [[ -z "$TARGET_USER" ]]; then
-    die "Username required for --buttons, --rotate, or --kiosk. Use --help for usage."
-fi
-
-# Rotate requires display output
-if $INSTALL_ROTATE && [[ -z "$DISPLAY_OUTPUT" ]]; then
-    die "--rotate requires display output. Usage: $0 --rotate <username> <display-output>"
+if { $INSTALL_BUTTONS || $INSTALL_KIOSK; } && [[ -z "$TARGET_USER" ]]; then
+    die "Username required for --buttons or --kiosk. Use --help for usage."
 fi
 
 # Validate user exists
@@ -121,82 +97,6 @@ if [[ -n "$TARGET_USER" ]]; then
     USER_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
     USER_ID=$(id -u "$TARGET_USER")
 fi
-
-# ------------------------------------------------------------------------------
-# Module: Safety
-# ------------------------------------------------------------------------------
-install_safety() {
-    echo ""
-    echo "=== Installing Safety Monitoring ==="
-
-    # Check for Python 3
-    if ! command -v python3 &> /dev/null; then
-        die "Python 3 is required but not installed"
-    fi
-
-    # Ensure pip is available
-    if ! python3 -m pip --version &> /dev/null; then
-        die "python3 -m pip is required but not installed"
-    fi
-
-    # Install lgpio for Pi 5 GPIO support
-    if ! python3 -c "import lgpio" 2>/dev/null; then
-        echo "Installing lgpio for Raspberry Pi 5 support..."
-        apt-get install -y -qq python3-lgpio
-    fi
-
-    # Install Python dependencies
-    echo "Installing Python dependencies..."
-    PIP_ARGS="--quiet"
-    if python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" 2>/dev/null; then
-        if python3 -m pip --help 2>/dev/null | grep -q -- "--break-system-packages"; then
-            PIP_ARGS="$PIP_ARGS --break-system-packages"
-        else
-            echo "Warning: Python 3.11+ detected but pip does not support --break-system-packages"
-        fi
-    fi
-
-    python3 -m pip install $PIP_ARGS \
-        adafruit-circuitpython-pct2075 \
-        adafruit-circuitpython-ina219 \
-        adafruit-blinka \
-        pyyaml
-
-    # Create directories
-    echo "Creating directories..."
-    mkdir -p "$INSTALL_DIR"
-    mkdir -p "$CONFIG_DIR"
-
-    # Copy scripts
-    echo "Installing scripts to $INSTALL_DIR..."
-    cp "$SCRIPT_DIR/scripts/pct2075_safety.py" "$INSTALL_DIR/"
-    cp "$SCRIPT_DIR/scripts/ina219_safety.py" "$INSTALL_DIR/"
-    chmod +x "$INSTALL_DIR"/*.py
-
-    # Copy config (don't overwrite existing)
-    if [[ -f "$CONFIG_DIR/safety-config.yaml" ]]; then
-        echo "Config already exists at $CONFIG_DIR/safety-config.yaml (not overwriting)"
-        cp "$SCRIPT_DIR/config.yaml" "$CONFIG_DIR/safety-config.yaml.new"
-    else
-        echo "Installing config to $CONFIG_DIR/safety-config.yaml..."
-        cp "$SCRIPT_DIR/config.yaml" "$CONFIG_DIR/safety-config.yaml"
-    fi
-
-    # Copy systemd units
-    echo "Installing systemd service files..."
-    cp "$SCRIPT_DIR/systemd/pct2075-safety.service" "$SYSTEMD_DIR/"
-    cp "$SCRIPT_DIR/systemd/ina219-safety.service" "$SYSTEMD_DIR/"
-
-    # Reload and enable
-    systemctl daemon-reload
-    for service in pct2075-safety ina219-safety; do
-        echo "  Enabling $service..."
-        systemctl enable "$service.service"
-        systemctl start "$service.service"
-    done
-
-    echo "Safety monitoring installed."
-}
 
 # ------------------------------------------------------------------------------
 # Module: Config
@@ -242,23 +142,6 @@ install_buttons() {
 }
 
 # ------------------------------------------------------------------------------
-# Module: Rotate
-# ------------------------------------------------------------------------------
-install_rotate() {
-    echo ""
-    echo "=== Installing Auto-Rotate for $TARGET_USER ==="
-    echo ""
-    echo "WARNING: Auto-rotate is DEPRECATED and no longer maintained."
-    echo "         Please use https://github.com/gambit-robotics/viam-accelerometer instead."
-    echo ""
-    if [[ -n "$TOUCH_DEVICE" ]]; then
-        "$SCRIPT_DIR/rotate/setup-autorotate.sh" "$TARGET_USER" "$DISPLAY_OUTPUT" "$TOUCH_DEVICE"
-    else
-        "$SCRIPT_DIR/rotate/setup-autorotate.sh" "$TARGET_USER" "$DISPLAY_OUTPUT"
-    fi
-}
-
-# ------------------------------------------------------------------------------
 # Module: Kiosk
 # ------------------------------------------------------------------------------
 detect_display_server() {
@@ -297,9 +180,7 @@ export SKIP_APT_UPDATE=1
 
 # Install requested modules
 $INSTALL_CONFIG && install_config
-$INSTALL_SAFETY && install_safety
 $INSTALL_BUTTONS && install_buttons
-$INSTALL_ROTATE && install_rotate
 $INSTALL_KIOSK && install_kiosk
 $INSTALL_PLYMOUTH && install_plymouth
 
@@ -317,19 +198,7 @@ if $INSTALL_CONFIG; then
     echo ""
 fi
 
-if $INSTALL_SAFETY; then
-    echo "Safety services:"
-    for service in pct2075-safety ina219-safety; do
-        status=$(systemctl is-active "$service.service" 2>/dev/null || echo "unknown")
-        echo "  - $service: $status"
-    done
-    echo ""
-    echo "Configuration: $CONFIG_DIR/safety-config.yaml"
-    echo "View logs: journalctl -u pct2075-safety -f"
-fi
-
-if $INSTALL_BUTTONS || $INSTALL_ROTATE || $INSTALL_KIOSK; then
-    echo ""
+if $INSTALL_BUTTONS || $INSTALL_KIOSK; then
     echo "User services installed for $TARGET_USER."
     echo "Commands (run as $TARGET_USER):"
     echo "  systemctl --user status <service>"

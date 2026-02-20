@@ -15,22 +15,20 @@ help:
 	@echo "  make deploy          Bundle + upload to dpaste, prints URL"
 	@echo ""
 	@echo "On Pi - Install (after extracting bundle):"
-	@echo "  make install-all DISPLAY=DSI-2    Install everything"
-	@echo "  make install-kiosk                   Install kiosk only"
-	@echo "  make install-plymouth                Install boot splash only"
-	@echo "  make install-config                  Install boot/audio config only"
-	@echo "  make uninstall                       Remove all installed components"
+	@echo "  make install-all     Install everything"
+	@echo "  make install-kiosk   Install kiosk only"
+	@echo "  make install-plymouth Install boot splash only"
+	@echo "  make install-config  Install boot/audio config only"
+	@echo "  make install-buttons Install volume buttons only"
+	@echo "  make uninstall       Remove all installed components"
 	@echo ""
 	@echo "On Pi - Update (redeploy + restart service):"
-	@echo "  make update-rotate DISPLAY=DSI-2  Update rotate script (DEPRECATED)"
-	@echo "  make update-kiosk                    Update kiosk config"
-	@echo "  make update-buttons                  Update buttons script"
-	@echo "  make update-plymouth                 Update boot splash"
+	@echo "  make update-kiosk    Update kiosk config"
+	@echo "  make update-buttons  Update buttons script"
+	@echo "  make update-plymouth Update boot splash"
 	@echo ""
 	@echo "Variables (USER auto-detected from sudo):"
 	@echo "  USER=<username>      Override target user (default: auto-detect)"
-	@echo "  DISPLAY=<output>     Display output for rotate (e.g., HDMI-A-1)"
-	@echo "  TOUCH=<device>       Optional touch device for rotate"
 
 # ------------------------------------------------------------------------------
 # Local Commands (macOS)
@@ -58,45 +56,28 @@ install-all:
 ifeq ($(USER),)
 	$(error USER could not be detected. Run with sudo or set USER=<username>)
 endif
-ifndef DISPLAY
-	$(error DISPLAY is required. Usage: make install-all DISPLAY=DSI-2)
-endif
 	@echo "Installing for user: $(USER)"
-	sudo ./install.sh --all $(USER) $(DISPLAY) $(TOUCH)
+	sudo ./install.sh --all $(USER)
 
 install-kiosk:
 ifeq ($(USER),)
 	$(error USER could not be detected. Run with sudo or set USER=<username>)
 endif
 	@echo "Installing for user: $(USER)"
-	sudo ./install.sh --no-safety --kiosk $(USER)
+	sudo ./install.sh --kiosk $(USER)
 
 install-plymouth:
-	sudo ./install.sh --no-safety --plymouth
+	sudo ./install.sh --plymouth
 
 install-config:
-	sudo ./install.sh --no-safety --config
+	sudo ./install.sh --config
 
 install-buttons:
 ifeq ($(USER),)
 	$(error USER could not be detected. Run with sudo or set USER=<username>)
 endif
 	@echo "Installing for user: $(USER)"
-	sudo ./install.sh --no-safety --buttons $(USER)
-
-install-rotate:
-	@echo "WARNING: Auto-rotate is DEPRECATED. Use https://github.com/gambit-robotics/viam-accelerometer instead."
-ifeq ($(USER),)
-	$(error USER could not be detected. Run with sudo or set USER=<username>)
-endif
-ifndef DISPLAY
-	$(error DISPLAY is required. Usage: make install-rotate DISPLAY=DSI-2)
-endif
-	@echo "Installing for user: $(USER)"
-	sudo ./install.sh --no-safety --rotate $(USER) $(DISPLAY) $(TOUCH)
-
-install-safety:
-	sudo ./install.sh
+	sudo ./install.sh --buttons $(USER)
 
 uninstall:
 	sudo ./uninstall.sh
@@ -104,19 +85,6 @@ uninstall:
 # ------------------------------------------------------------------------------
 # Update Commands (redeploy + restart)
 # ------------------------------------------------------------------------------
-
-update-rotate:
-	@echo "WARNING: Auto-rotate is DEPRECATED. Use https://github.com/gambit-robotics/viam-accelerometer instead."
-ifeq ($(USER),)
-	$(error USER could not be detected. Run with sudo or set USER=<username>)
-endif
-ifndef DISPLAY
-	$(error DISPLAY is required. Usage: make update-rotate DISPLAY=DSI-2)
-endif
-	@echo "=== Updating rotate for $(USER) ==="
-	sudo ./rotate/setup-autorotate.sh $(USER) $(DISPLAY) $(TOUCH)
-	sudo -u $(USER) XDG_RUNTIME_DIR=/run/user/$$(id -u $(USER)) systemctl --user restart autorotate.service
-	@echo "Done. Service restarted."
 
 update-kiosk:
 ifeq ($(USER),)
@@ -140,12 +108,6 @@ update-plymouth:
 	@echo "=== Updating plymouth ==="
 	sudo ./plymouth/setup-bootsplash.sh
 	@echo "Done. Reboot to see changes."
-
-update-safety:
-	@echo "=== Updating safety services ==="
-	sudo ./install.sh
-	sudo systemctl restart pct2075-safety ina219-safety
-	@echo "Done. Services restarted."
 
 # ------------------------------------------------------------------------------
 # Development

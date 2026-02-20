@@ -7,10 +7,11 @@ Raspberry Pi setup scripts and systemd services for kiosk displays, hardware mon
 | Module | Purpose | Scripts |
 |--------|---------|---------|
 | [buttons/](buttons/) | I2C volume control buttons | `setup-buttons.sh` |
-| [rotate/](rotate/) | **DEPRECATED** - Use [viam-accelerometer](https://github.com/gambit-robotics/viam-accelerometer) | `setup-autorotate.sh` |
 | [kiosk/](kiosk/) | Chromium fullscreen kiosk | `setup-kiosk-wayland.sh` |
 | [plymouth/](plymouth/) | Custom boot splash screen | `setup-bootsplash.sh` |
 | [config/](config/) | Pi boot & audio configs | `config.txt`, `asound.conf` |
+
+> **Auto-rotate** has been removed from this repo. Use [gambit-robotics/viam-accelerometer](https://github.com/gambit-robotics/viam-accelerometer) instead.
 
 ## Quick Start
 
@@ -19,8 +20,8 @@ Run `make` to see all available commands:
 ```bash
 make              # Show help
 make deploy       # Bundle + upload to dpaste (macOS)
-make install-all DISPLAY=DSI-2      # Install everything (Pi)
-make update-kiosk                   # Update single module (Pi)
+make install-all  # Install everything (Pi)
+make update-kiosk # Update single module (Pi)
 ```
 
 User is auto-detected from `sudo`. Override with `USER=gambitadmin` if needed.
@@ -33,17 +34,16 @@ The `install.sh` script supports modular installation. Use `make` targets or cal
 
 ```bash
 # Install everything (user auto-detected)
-make install-all DISPLAY=DSI-2
+make install-all
 
 # Or call install.sh directly
-sudo ./install.sh --all gambitadmin DSI-2
+sudo ./install.sh --all gambitadmin
 
 # Individual modules
 make install-kiosk
 make install-plymouth
 make install-config
 make install-buttons
-make install-rotate DISPLAY=DSI-2  # DEPRECATED
 
 # Show help
 sudo ./install.sh --help
@@ -69,11 +69,8 @@ make deploy
 curl -sL https://dpaste.com/ABC123.txt | base64 -d | tar xzf - -C /tmp
 cd /tmp/cm5-local-scripts
 
-# Find display output
-wlr-randr | grep -E "^[A-Z]"
-
 # Install everything (user auto-detected)
-make install-all DISPLAY=DSI-2
+make install-all
 
 # Reboot
 sudo reboot
@@ -85,7 +82,6 @@ sudo reboot
 # Re-deploy bundle, then on Pi:
 curl -sL <URL>.txt | base64 -d | tar xzf - -C /tmp
 cd /tmp/cm5-local-scripts
-make update-rotate DISPLAY=DSI-2      # DEPRECATED - use viam-accelerometer
 make update-kiosk                     # No reboot needed
 ```
 
@@ -95,9 +91,8 @@ make update-kiosk                     # No reboot needed
 |------|---------|
 | Deploy bundle | `make deploy` (Mac) |
 | Download | `curl -sL <URL>.txt \| base64 -d \| tar xzf - -C /tmp` |
-| Find display | `wlr-randr \| grep -E "^[A-Z]"` |
-| Install all | `make install-all DISPLAY=DSI-2` |
-| Update module | `make update-kiosk` (rotate deprecated) |
+| Install all | `make install-all` |
+| Update module | `make update-kiosk` |
 
 ---
 
@@ -125,12 +120,6 @@ sudo /tmp/setup-buttons.sh gambitadmin
 systemctl --user status buttons
 journalctl --user -u buttons -f
 ```
-
----
-
-## Auto-Rotate (DEPRECATED)
-
-> **DEPRECATED**: This module is deprecated. Use [gambit-robotics/viam-accelerometer](https://github.com/gambit-robotics/viam-accelerometer) instead, which provides accelerometer-based rotation as a Viam module.
 
 ---
 
@@ -230,7 +219,6 @@ i2cdetect -y 1
 ```bash
 # Uninstall specific modules
 sudo ./uninstall.sh --buttons gambitadmin
-sudo ./uninstall.sh --rotate gambitadmin
 sudo ./uninstall.sh --kiosk gambitadmin
 
 # Uninstall everything
