@@ -1,6 +1,6 @@
 # Gambit CM5 Scripts
 
-Raspberry Pi setup scripts and systemd services for kiosk displays, hardware monitoring, and peripheral control.
+Raspberry Pi setup scripts for kiosk displays, boot splash, audio/firmware config, and peripheral control.
 
 ## Modules
 
