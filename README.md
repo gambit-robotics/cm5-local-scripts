@@ -19,7 +19,6 @@ Run `make` to see all available commands:
 
 ```bash
 make              # Show help
-make deploy       # Bundle + upload to dpaste (macOS)
 make install-all  # Install everything (Pi)
 make update-kiosk # Update single module (Pi)
 ```
@@ -51,24 +50,18 @@ sudo ./install.sh --help
 
 ---
 
-## Remote Deployment (Viam Shell)
+## Deployment
 
-For deploying to Pis accessible only via Viam remote shell (no direct SSH).
-
-### 1. Bundle and upload (Mac)
+### 1. Clone on Pi
 
 ```bash
-make deploy
-# Outputs URL like: https://dpaste.com/ABC123
+git clone https://github.com/gambit-robotics/cm5-local-scripts.git
+cd cm5-local-scripts
 ```
 
-### 2. Deploy to Pi (Viam shell)
+### 2. Install
 
 ```bash
-# Download and extract
-curl -sL https://dpaste.com/ABC123.txt | base64 -d | tar xzf - -C /tmp
-cd /tmp/cm5-local-scripts
-
 # Install everything (user auto-detected)
 make install-all
 
@@ -76,37 +69,19 @@ make install-all
 sudo reboot
 ```
 
-### Updating a single module
+### Updating
 
 ```bash
-# Re-deploy bundle, then on Pi:
-curl -sL <URL>.txt | base64 -d | tar xzf - -C /tmp
-cd /tmp/cm5-local-scripts
-make update-kiosk                     # No reboot needed
+cd cm5-local-scripts
+git pull
+make update-kiosk   # No reboot needed
 ```
-
-### Quick reference
-
-| Step | Command |
-|------|---------|
-| Deploy bundle | `make deploy` (Mac) |
-| Download | `curl -sL <URL>.txt \| base64 -d \| tar xzf - -C /tmp` |
-| Install all | `make install-all` |
-| Update module | `make update-kiosk` |
 
 ---
 
 ## Buttons
 
 I2C volume control using Arduino Modulino Buttons (ABX00110).
-
-```bash
-# Deploy
-base64 < buttons/setup-buttons.sh | pbcopy
-# On Pi:
-echo 'BASE64' | base64 -d > /tmp/setup-buttons.sh
-sudo /tmp/setup-buttons.sh gambitadmin
-```
 
 | Button | Action |
 |--------|--------|
@@ -126,14 +101,6 @@ journalctl --user -u buttons -f
 ## Kiosk
 
 Chromium fullscreen kiosk mode.
-
-```bash
-# Deploy (Wayland - Bookworm default)
-base64 < kiosk/setup-kiosk-wayland.sh | pbcopy
-# On Pi:
-echo 'BASE64' | base64 -d > /tmp/setup-kiosk.sh
-sudo /tmp/setup-kiosk.sh gambitadmin
-```
 
 ```bash
 systemctl --user status kiosk
@@ -172,21 +139,7 @@ Reference configuration files for Raspberry Pi CM4/CM5.
 | `config.txt` | `/boot/firmware/config.txt` | Boot config (I2C, SPI, display, camera) |
 | `asound.conf` | `/etc/asound.conf` | ALSA audio routing for USB audio device |
 
-### Deploy
-
-```bash
-# Boot config
-base64 < config/config.txt | pbcopy
-# On Pi:
-echo 'BASE64' | base64 -d | sudo tee /boot/firmware/config.txt
-
-# Audio config
-base64 < config/asound.conf | pbcopy
-# On Pi:
-echo 'BASE64' | base64 -d | sudo tee /etc/asound.conf
-```
-
-**Note**: Reboot required after changing `/boot/firmware/config.txt`.
+Install with `make install-config`. Reboot required after changing `/boot/firmware/config.txt`.
 
 ---
 
