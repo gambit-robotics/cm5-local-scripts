@@ -16,12 +16,14 @@ help:
 	@echo "  make install-plymouth Install boot splash only"
 	@echo "  make install-config  Install boot/audio config only"
 	@echo "  make install-buttons Install volume buttons only"
+	@echo "  make install-thermal-protection Install thermal protection daemon"
 	@echo "  make uninstall       Remove all installed components"
 	@echo ""
 	@echo "On Pi - Update (update + restart service):"
 	@echo "  make update-kiosk    Update kiosk config"
 	@echo "  make update-buttons  Update buttons script"
 	@echo "  make update-plymouth Update boot splash"
+	@echo "  make update-thermal-protection Update thermal protection daemon"
 	@echo ""
 	@echo "Variables (USER auto-detected from sudo):"
 	@echo "  USER=<username>      Override target user (default: auto-detect)"
@@ -57,6 +59,9 @@ endif
 	@echo "Installing for user: $(USER)"
 	sudo ./install.sh --buttons $(USER)
 
+install-thermal-protection:
+	sudo ./install.sh --thermal-protection
+
 uninstall:
 	sudo ./uninstall.sh
 
@@ -86,6 +91,12 @@ update-plymouth:
 	@echo "=== Updating plymouth ==="
 	sudo ./plymouth/setup-bootsplash.sh
 	@echo "Done. Reboot to see changes."
+
+update-thermal-protection:
+	@echo "=== Updating thermal protection ==="
+	sudo ./thermal-protection/setup-thermal.sh
+	sudo systemctl restart thermal-protection.service
+	@echo "Done. Service restarted."
 
 # ------------------------------------------------------------------------------
 # Development

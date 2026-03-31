@@ -9,6 +9,7 @@ set -e
 # Module flags (defaults)
 UNINSTALL_BUTTONS=false
 UNINSTALL_KIOSK=false
+UNINSTALL_THERMAL_PROTECTION=false
 
 # User module arguments
 TARGET_USER=""
@@ -25,6 +26,7 @@ Usage: sudo ./uninstall.sh [OPTIONS] [<username>]
 Modules:
   --buttons         Uninstall I2C volume button controller
   --kiosk           Uninstall Chromium kiosk
+  --thermal-protection  Uninstall thermal protection daemon
   --all             Uninstall all modules
 
 Arguments (required for user-level modules):
@@ -49,7 +51,8 @@ while [[ $# -gt 0 ]]; do
         --help|-h) show_help ;;
         --buttons) UNINSTALL_BUTTONS=true; shift ;;
         --kiosk) UNINSTALL_KIOSK=true; shift ;;
-        --all) UNINSTALL_BUTTONS=true; UNINSTALL_KIOSK=true; shift ;;
+        --thermal-protection) UNINSTALL_THERMAL_PROTECTION=true; shift ;;
+        --all) UNINSTALL_BUTTONS=true; UNINSTALL_KIOSK=true; UNINSTALL_THERMAL_PROTECTION=true; shift ;;
         -*)
             die "Unknown option: $1. Use --help for usage."
             ;;
@@ -155,6 +158,33 @@ uninstall_kiosk() {
 }
 
 # ------------------------------------------------------------------------------
+# Module: Thermal Protection
+# ------------------------------------------------------------------------------
+uninstall_thermal_protection() {
+    echo ""
+    echo "=== Uninstalling Thermal Protection Daemon ==="
+
+    # Stop and disable system service
+    if systemctl is-active --quiet thermal-protection.service 2>/dev/null; then
+        echo "  Stopping thermal-protection service..."
+        systemctl stop thermal-protection.service || true
+    fi
+    if systemctl is-enabled --quiet thermal-protection.service 2>/dev/null; then
+        echo "  Disabling thermal-protection service..."
+        systemctl disable thermal-protection.service || true
+    fi
+
+    # Remove files
+    rm -f /etc/systemd/system/thermal-protection.service
+    rm -f /usr/local/bin/thermal-protection.sh
+    rm -rf /usr/local/share/thermal-protection
+
+    systemctl daemon-reload
+
+    echo "Thermal protection daemon uninstalled."
+}
+
+# ------------------------------------------------------------------------------
 # Main
 # ------------------------------------------------------------------------------
 echo "=== Gambit Scripts Uninstaller ==="
@@ -162,6 +192,7 @@ echo "=== Gambit Scripts Uninstaller ==="
 # Uninstall requested modules
 $UNINSTALL_BUTTONS && uninstall_buttons
 $UNINSTALL_KIOSK && uninstall_kiosk
+$UNINSTALL_THERMAL_PROTECTION && uninstall_thermal_protection
 
 # ------------------------------------------------------------------------------
 # Summary

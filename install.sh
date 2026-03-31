@@ -13,6 +13,7 @@ INSTALL_CONFIG=false
 INSTALL_BUTTONS=false
 INSTALL_KIOSK=false
 INSTALL_PLYMOUTH=false
+INSTALL_THERMAL_PROTECTION=false
 KIOSK_TYPE=""  # "wayland" or "" (auto-detect)
 
 # User module arguments
@@ -33,6 +34,7 @@ Modules:
   --kiosk           Install Chromium kiosk
   --kiosk-wayland   Install Wayland kiosk explicitly
   --plymouth        Install custom boot splash screen
+  --thermal-protection  Install thermal protection daemon
   --all             Install all modules (including config)
 
 Arguments (required for user-level modules):
@@ -61,7 +63,8 @@ while [[ $# -gt 0 ]]; do
         --kiosk) INSTALL_KIOSK=true; shift ;;
         --kiosk-wayland) INSTALL_KIOSK=true; KIOSK_TYPE="wayland"; shift ;;
         --plymouth) INSTALL_PLYMOUTH=true; shift ;;
-        --all) INSTALL_CONFIG=true; INSTALL_BUTTONS=true; INSTALL_KIOSK=true; INSTALL_PLYMOUTH=true; shift ;;
+        --thermal-protection) INSTALL_THERMAL_PROTECTION=true; shift ;;
+        --all) INSTALL_CONFIG=true; INSTALL_BUTTONS=true; INSTALL_KIOSK=true; INSTALL_PLYMOUTH=true; INSTALL_THERMAL_PROTECTION=true; shift ;;
         -*)
             die "Unknown option: $1. Use --help for usage."
             ;;
@@ -166,6 +169,15 @@ install_plymouth() {
 }
 
 # ------------------------------------------------------------------------------
+# Module: Thermal Protection
+# ------------------------------------------------------------------------------
+install_thermal_protection() {
+    echo ""
+    echo "=== Installing Thermal Protection Daemon ==="
+    "$SCRIPT_DIR/thermal-protection/setup-thermal.sh"
+}
+
+# ------------------------------------------------------------------------------
 # Main
 # ------------------------------------------------------------------------------
 echo "=== Gambit Scripts Installer ==="
@@ -183,6 +195,7 @@ $INSTALL_CONFIG && install_config
 $INSTALL_BUTTONS && install_buttons
 $INSTALL_KIOSK && install_kiosk
 $INSTALL_PLYMOUTH && install_plymouth
+$INSTALL_THERMAL_PROTECTION && install_thermal_protection
 
 # ------------------------------------------------------------------------------
 # Summary
@@ -210,6 +223,13 @@ if $INSTALL_PLYMOUTH; then
     echo "Plymouth boot splash installed."
     echo "  Theme: gambit"
     echo "  Test: sudo plymouthd --debug --tty=/dev/tty1 && sudo plymouth show-splash"
+fi
+
+if $INSTALL_THERMAL_PROTECTION; then
+    echo ""
+    echo "Thermal protection daemon installed."
+    echo "  sudo systemctl status thermal-protection"
+    echo "  sudo journalctl -u thermal-protection -f"
 fi
 
 echo ""
