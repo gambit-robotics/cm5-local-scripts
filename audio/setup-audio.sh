@@ -42,6 +42,7 @@ After=systemd-user-sessions.service
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/aplay -q $WAV_DST
+TimeoutStartSec=10
 
 [Install]
 WantedBy=multi-user.target
