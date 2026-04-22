@@ -36,8 +36,10 @@ echo "Writing $SERVICE_FILE..."
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=Gambit boot chime
+# After=sound.target only: the WAV player has no other dependencies. Do not
+# add After=systemd-user-sessions.service or similar — those gate on login
+# availability and delay the chime until the very end of boot (GMBT-156).
 After=sound.target
-After=systemd-user-sessions.service
 
 [Service]
 Type=oneshot
