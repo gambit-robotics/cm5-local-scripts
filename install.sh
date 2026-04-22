@@ -13,6 +13,7 @@ INSTALL_CONFIG=false
 INSTALL_BUTTONS=false
 INSTALL_KIOSK=false
 INSTALL_PLYMOUTH=false
+INSTALL_AUDIO=false
 KIOSK_TYPE=""  # "wayland" or "" (auto-detect)
 
 # User module arguments
@@ -33,6 +34,7 @@ Modules:
   --kiosk           Install Chromium kiosk
   --kiosk-wayland   Install Wayland kiosk explicitly
   --plymouth        Install custom boot splash screen
+  --audio           Install boot chime (plays on early boot)
   --all             Install all modules (including config)
 
 Arguments (required for user-level modules):
@@ -61,7 +63,8 @@ while [[ $# -gt 0 ]]; do
         --kiosk) INSTALL_KIOSK=true; shift ;;
         --kiosk-wayland) INSTALL_KIOSK=true; KIOSK_TYPE="wayland"; shift ;;
         --plymouth) INSTALL_PLYMOUTH=true; shift ;;
-        --all) INSTALL_CONFIG=true; INSTALL_BUTTONS=true; INSTALL_KIOSK=true; INSTALL_PLYMOUTH=true; shift ;;
+        --audio) INSTALL_AUDIO=true; shift ;;
+        --all) INSTALL_CONFIG=true; INSTALL_BUTTONS=true; INSTALL_KIOSK=true; INSTALL_PLYMOUTH=true; INSTALL_AUDIO=true; shift ;;
         -*)
             die "Unknown option: $1. Use --help for usage."
             ;;
@@ -129,6 +132,17 @@ install_config() {
         echo "Warning: config/asound.conf not found, skipping audio config"
     fi
 
+    # logind drop-in: ignore short power-button taps, require >=5s hold to power off
+    # (GMBT-156: prevent boot-time panic-press loop)
+    if [[ -f "$SCRIPT_DIR/config/logind-power-button.conf" ]]; then
+        echo "Installing logind drop-in to /etc/systemd/logind.conf.d/50-gambit-power-button.conf..."
+        install -d -m 0755 /etc/systemd/logind.conf.d
+        install -m 0644 "$SCRIPT_DIR/config/logind-power-button.conf" \
+            /etc/systemd/logind.conf.d/50-gambit-power-button.conf
+    else
+        echo "Warning: config/logind-power-button.conf not found, skipping logind drop-in"
+    fi
+
     echo "System configuration installed."
 }
 
@@ -166,6 +180,15 @@ install_plymouth() {
 }
 
 # ------------------------------------------------------------------------------
+# Module: Audio (boot chime)
+# ------------------------------------------------------------------------------
+install_audio() {
+    echo ""
+    echo "=== Installing Boot Chime ==="
+    "$SCRIPT_DIR/audio/setup-audio.sh"
+}
+
+# ------------------------------------------------------------------------------
 # Main
 # ------------------------------------------------------------------------------
 echo "=== Gambit Scripts Installer ==="
@@ -183,6 +206,7 @@ $INSTALL_CONFIG && install_config
 $INSTALL_BUTTONS && install_buttons
 $INSTALL_KIOSK && install_kiosk
 $INSTALL_PLYMOUTH && install_plymouth
+$INSTALL_AUDIO && install_audio
 
 # ------------------------------------------------------------------------------
 # Summary
@@ -195,6 +219,8 @@ if $INSTALL_CONFIG; then
     echo "System config installed:"
     echo "  - /boot/firmware/config.txt"
     echo "  - /etc/asound.conf"
+    echo "  - /etc/systemd/logind.conf.d/50-gambit-power-button.conf"
+    echo "    (short tap = no-op; hold >=5s = shutdown)"
     echo ""
 fi
 
@@ -210,6 +236,14 @@ if $INSTALL_PLYMOUTH; then
     echo "Plymouth boot splash installed."
     echo "  Theme: gambit"
     echo "  Test: sudo plymouthd --debug --tty=/dev/tty1 && sudo plymouth show-splash"
+fi
+
+if $INSTALL_AUDIO; then
+    echo ""
+    echo "Boot chime installed."
+    echo "  Asset:   /usr/local/share/gambit/boot-chime.wav"
+    echo "  Service: gambit-boot-chime.service (WantedBy=multi-user.target)"
+    echo "  Test:    sudo systemctl start gambit-boot-chime.service"
 fi
 
 echo ""

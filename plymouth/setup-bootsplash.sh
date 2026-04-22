@@ -10,6 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 THEME_NAME="${1:-gambit}"
 SPLASH_IMAGE="${2:-${SCRIPT_DIR}/SplashLoading.png}"
 SHUTDOWN_IMAGE="${3:-${SCRIPT_DIR}/SplashShutdown.png}"
+DOT_IMAGE="${SCRIPT_DIR}/dot.png"
 THEME_DIR="/usr/share/plymouth/themes/${THEME_NAME}"
 
 # Colors for output
@@ -47,6 +48,12 @@ if [[ ! -f "$SPLASH_IMAGE" ]]; then
     usage
 fi
 
+# Check for loading-dot sprite (required by the animated splash, GMBT-156)
+if [[ ! -f "$DOT_IMAGE" ]]; then
+    print_error "Dot image not found: $DOT_IMAGE"
+    exit 1
+fi
+
 echo "================================================"
 echo "  Plymouth Boot Splash Setup"
 echo "  Theme: ${THEME_NAME}"
@@ -74,6 +81,8 @@ else
     print_warning "Shutdown will reuse the boot splash image."
     cp "${SPLASH_IMAGE}" "${THEME_DIR}/shutdown-splash.png"
 fi
+# Loading-dot sprite used by the animated boot splash (GMBT-156)
+cp "${DOT_IMAGE}" "${THEME_DIR}/dot.png"
 
 # Step 4: Create the theme script
 print_status "Creating theme script..."
@@ -81,7 +90,9 @@ cat > "${THEME_DIR}/${THEME_NAME}.script" << 'EOF'
 # Plymouth theme script - shows boot or shutdown image based on mode
 
 status = Plymouth.GetMode();
-if (status == "shutdown" || status == "reboot") {
+is_shutdown = (status == "shutdown" || status == "reboot");
+
+if (is_shutdown) {
     wallpaper_image = Image("shutdown-splash.png");
 } else {
     wallpaper_image = Image("splash.png");
@@ -92,6 +103,36 @@ screen_height = Window.GetHeight();
 resized_wallpaper_image = wallpaper_image.Scale(screen_width, screen_height);
 wallpaper_sprite = Sprite(resized_wallpaper_image);
 wallpaper_sprite.SetZ(-100);
+
+# Loading-dot animation (boot only) — liveness indicator so users can see the
+# device is actively booting and not frozen on a static logo (GMBT-156).
+if (!is_shutdown) {
+    dot_image = Image("dot.png");
+    dot_w = dot_image.GetWidth();
+    dot_h = dot_image.GetHeight();
+    dot_gap = dot_w / 2;
+    total_w = 3 * dot_w + 2 * dot_gap;
+    dot_y = screen_height - (dot_h * 2);
+    dot_x0 = (screen_width - total_w) / 2;
+
+    dot0 = Sprite(dot_image);
+    dot0.SetX(dot_x0);
+    dot0.SetY(dot_y);
+    dot0.SetZ(10);
+    dot0.SetOpacity(0.3);
+
+    dot1 = Sprite(dot_image);
+    dot1.SetX(dot_x0 + (dot_w + dot_gap));
+    dot1.SetY(dot_y);
+    dot1.SetZ(10);
+    dot1.SetOpacity(0.3);
+
+    dot2 = Sprite(dot_image);
+    dot2.SetX(dot_x0 + 2 * (dot_w + dot_gap));
+    dot2.SetY(dot_y);
+    dot2.SetZ(10);
+    dot2.SetOpacity(0.3);
+}
 
 # Hide password prompt styling
 fun password_dialogue_setup(message, bullets) {
@@ -108,8 +149,31 @@ fun display_password(prompt, bullets) {
 fun message_callback(text) {
 }
 
+# Triangle-wave opacity per dot: ramp 0.3 -> 1.0 over 30 frames, back down over 30.
+# Each dot is offset by 20 frames so they chase in a wave.
+fun dot_opacity(phase, offset) {
+    local = phase + offset;
+    while (local >= 60) {
+        local = local - 60;
+    }
+    tri = local;
+    if (tri > 30) {
+        tri = 60 - tri;
+    }
+    return 0.3 + 0.7 * (tri / 30);
+}
+
+phase = 0;
 Plymouth.SetRefreshFunction(fun() {
-    # Refresh function - keeps splash visible
+    if (!is_shutdown) {
+        phase = phase + 1;
+        if (phase >= 60) {
+            phase = 0;
+        }
+        dot0.SetOpacity(dot_opacity(phase, 0));
+        dot1.SetOpacity(dot_opacity(phase, 20));
+        dot2.SetOpacity(dot_opacity(phase, 40));
+    }
 });
 EOF
 

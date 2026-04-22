@@ -11,12 +11,13 @@ help:
 	@echo "Gambit CM5 Scripts - Available Commands"
 	@echo ""
 	@echo "On Pi - Install (after cloning repo):"
-	@echo "  make install-all     Install everything"
-	@echo "  make install-kiosk   Install kiosk only"
+	@echo "  make install-all      Install everything"
+	@echo "  make install-kiosk    Install kiosk only"
 	@echo "  make install-plymouth Install boot splash only"
-	@echo "  make install-config  Install boot/audio config only"
-	@echo "  make install-buttons Install volume buttons only"
-	@echo "  make uninstall       Remove all installed components"
+	@echo "  make install-config   Install boot/audio config only"
+	@echo "  make install-buttons  Install volume buttons only"
+	@echo "  make install-audio    Install boot chime only"
+	@echo "  make uninstall        Remove all installed components"
 	@echo ""
 	@echo "On Pi - Update (update + restart service):"
 	@echo "  make update-kiosk    Update kiosk config"
@@ -46,6 +47,9 @@ endif
 
 install-plymouth:
 	sudo ./install.sh --plymouth
+
+install-audio:
+	sudo ./install.sh --audio
 
 install-config:
 	sudo ./install.sh --config
