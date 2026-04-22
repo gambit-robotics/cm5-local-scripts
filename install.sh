@@ -108,10 +108,14 @@ install_config() {
     echo ""
     echo "=== Installing System Configuration ==="
 
-    # Boot config
+    # Boot config. The backup captures the true pre-provisioning state, so only
+    # create it on the first install — subsequent runs must not overwrite it,
+    # otherwise after the second install the "backup" is just a copy of our own
+    # config and the real original is lost. Matters when install_config runs
+    # repeatedly (e.g. from chef's Viam module first_run on every release bump).
     if [[ -f "$SCRIPT_DIR/config/config.txt" ]]; then
         echo "Installing boot config to /boot/firmware/config.txt..."
-        if [[ -f /boot/firmware/config.txt ]]; then
+        if [[ -f /boot/firmware/config.txt ]] && [[ ! -f /boot/firmware/config.txt.backup ]]; then
             cp /boot/firmware/config.txt /boot/firmware/config.txt.backup
             echo "  Backed up existing config to /boot/firmware/config.txt.backup"
         fi
@@ -120,10 +124,10 @@ install_config() {
         echo "Warning: config/config.txt not found, skipping boot config"
     fi
 
-    # Audio config
+    # Audio config (same one-time backup rule as above)
     if [[ -f "$SCRIPT_DIR/config/asound.conf" ]]; then
         echo "Installing audio config to /etc/asound.conf..."
-        if [[ -f /etc/asound.conf ]]; then
+        if [[ -f /etc/asound.conf ]] && [[ ! -f /etc/asound.conf.backup ]]; then
             cp /etc/asound.conf /etc/asound.conf.backup
             echo "  Backed up existing config to /etc/asound.conf.backup"
         fi
