@@ -17,6 +17,7 @@ help:
 	@echo "  make install-config   Install boot/audio config only"
 	@echo "  make install-buttons  Install volume buttons only"
 	@echo "  make install-audio    Install boot chime only"
+	@echo "  make install-lowpower Install low-power config (CPU + gpu_mem)"
 	@echo "  make uninstall        Remove all installed components"
 	@echo ""
 	@echo "On Pi - Update (update + restart service):"
@@ -50,6 +51,15 @@ install-plymouth:
 
 install-audio:
 	sudo ./install.sh --audio
+
+install-lowpower:
+ifeq ($(USER),)
+	@echo "Installing system-level lowpower (no user → no screen dim)"
+	sudo ./install.sh --lowpower
+else
+	@echo "Installing for user: $(USER)"
+	sudo ./install.sh --lowpower $(USER)
+endif
 
 install-config:
 	sudo ./install.sh --config
