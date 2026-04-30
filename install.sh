@@ -14,6 +14,7 @@ INSTALL_BUTTONS=false
 INSTALL_KIOSK=false
 INSTALL_PLYMOUTH=false
 INSTALL_AUDIO=false
+INSTALL_LOWPOWER=false
 KIOSK_TYPE=""  # "wayland" or "" (auto-detect)
 
 # User module arguments
@@ -35,6 +36,7 @@ Modules:
   --kiosk-wayland   Install Wayland kiosk explicitly
   --plymouth        Install custom boot splash screen
   --audio           Install boot chime (plays on early boot)
+  --lowpower        Install low-power config (CPU governor + gpu_mem trim)
   --all             Install all modules (including config)
 
 Arguments (required for user-level modules):
@@ -64,7 +66,8 @@ while [[ $# -gt 0 ]]; do
         --kiosk-wayland) INSTALL_KIOSK=true; KIOSK_TYPE="wayland"; shift ;;
         --plymouth) INSTALL_PLYMOUTH=true; shift ;;
         --audio) INSTALL_AUDIO=true; shift ;;
-        --all) INSTALL_CONFIG=true; INSTALL_BUTTONS=true; INSTALL_KIOSK=true; INSTALL_PLYMOUTH=true; INSTALL_AUDIO=true; shift ;;
+        --lowpower) INSTALL_LOWPOWER=true; shift ;;
+        --all) INSTALL_CONFIG=true; INSTALL_BUTTONS=true; INSTALL_KIOSK=true; INSTALL_PLYMOUTH=true; INSTALL_AUDIO=true; INSTALL_LOWPOWER=true; shift ;;
         -*)
             die "Unknown option: $1. Use --help for usage."
             ;;
@@ -193,6 +196,15 @@ install_audio() {
 }
 
 # ------------------------------------------------------------------------------
+# Module: Lowpower (CPU governor pin + gpu_mem trim)
+# ------------------------------------------------------------------------------
+install_lowpower() {
+    echo ""
+    echo "=== Installing Lowpower Config ==="
+    "$SCRIPT_DIR/lowpower/setup-lowpower.sh"
+}
+
+# ------------------------------------------------------------------------------
 # Main
 # ------------------------------------------------------------------------------
 echo "=== Gambit Scripts Installer ==="
@@ -211,6 +223,7 @@ $INSTALL_BUTTONS && install_buttons
 $INSTALL_KIOSK && install_kiosk
 $INSTALL_PLYMOUTH && install_plymouth
 $INSTALL_AUDIO && install_audio
+$INSTALL_LOWPOWER && install_lowpower
 
 # ------------------------------------------------------------------------------
 # Summary
@@ -248,6 +261,14 @@ if $INSTALL_AUDIO; then
     echo "  Asset:   /usr/local/share/gambit/boot-chime.wav"
     echo "  Service: gambit-boot-chime.service (WantedBy=multi-user.target)"
     echo "  Test:    sudo systemctl start gambit-boot-chime.service"
+fi
+
+if $INSTALL_LOWPOWER; then
+    echo ""
+    echo "Lowpower config installed."
+    echo "  Service: gambit-cpu-governor.service (pins schedutil at boot)"
+    echo "  Config:  /boot/firmware/config.txt updated (gpu_mem=76)"
+    echo "  Audit:   sudo $SCRIPT_DIR/lowpower/audit-idle-power.sh"
 fi
 
 echo ""
