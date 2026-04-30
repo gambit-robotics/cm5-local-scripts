@@ -53,7 +53,13 @@ install-audio:
 	sudo ./install.sh --audio
 
 install-lowpower:
+ifeq ($(USER),)
+	@echo "Installing system-level lowpower (no user → no screen dim)"
 	sudo ./install.sh --lowpower
+else
+	@echo "Installing for user: $(USER)"
+	sudo ./install.sh --lowpower $(USER)
+endif
 
 install-config:
 	sudo ./install.sh --config

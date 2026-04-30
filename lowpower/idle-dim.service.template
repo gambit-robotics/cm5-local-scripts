@@ -1,0 +1,14 @@
+[Unit]
+Description=Gambit: dim DSI backlight when kiosk is idle
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/swayidle -w \
+    timeout %IDLE_TIMEOUT_SECONDS% '%DIM_SCRIPT% dim' \
+    resume '%DIM_SCRIPT% restore'
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

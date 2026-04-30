@@ -36,7 +36,8 @@ Modules:
   --kiosk-wayland   Install Wayland kiosk explicitly
   --plymouth        Install custom boot splash screen
   --audio           Install boot chime (plays on early boot)
-  --lowpower        Install low-power config (CPU governor + gpu_mem trim)
+  --lowpower        Install low-power config (CPU governor + gpu_mem +
+                    optional per-user screen dim if <username> supplied)
   --all             Install all modules (including config)
 
 Arguments (required for user-level modules):
@@ -196,12 +197,19 @@ install_audio() {
 }
 
 # ------------------------------------------------------------------------------
-# Module: Lowpower (CPU governor pin + gpu_mem trim)
+# Module: Lowpower (CPU governor pin + gpu_mem trim, plus per-user screen dim)
 # ------------------------------------------------------------------------------
 install_lowpower() {
     echo ""
     echo "=== Installing Lowpower Config ==="
     "$SCRIPT_DIR/lowpower/setup-lowpower.sh"
+    if [[ -n "$TARGET_USER" ]]; then
+        TARGET_USER="$TARGET_USER" "$SCRIPT_DIR/lowpower/setup-screen-dim.sh"
+    else
+        echo ""
+        echo "(skipping screen-dim user service — no <username> arg given;"
+        echo " re-run with: sudo ./install.sh --lowpower <username>)"
+    fi
 }
 
 # ------------------------------------------------------------------------------
@@ -266,8 +274,12 @@ fi
 if $INSTALL_LOWPOWER; then
     echo ""
     echo "Lowpower config installed."
-    echo "  Service: gambit-cpu-governor.service (pins schedutil at boot)"
-    echo "  Config:  /boot/firmware/config.txt updated (gpu_mem=76)"
+    echo "  System:  gambit-cpu-governor.service (schedutil at boot)"
+    echo "           /boot/firmware/config.txt → gpu_mem=76"
+    if [[ -n "$TARGET_USER" ]]; then
+        echo "  User:    gambit-idle-dim.service (screen dim after 5min idle)"
+        echo "  Test:    sudo -u $TARGET_USER /usr/local/bin/gambit-dim dim"
+    fi
     echo "  Audit:   sudo $SCRIPT_DIR/lowpower/audit-idle-power.sh"
 fi
 
