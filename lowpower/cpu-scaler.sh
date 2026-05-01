@@ -3,21 +3,17 @@ set -uo pipefail
 
 # Dynamic CPU hotplug daemon for the lowpower module.
 #
-# Polls chef every POLL_INTERVAL seconds. While any burner is in an
-# active flow phase (analyzing | tools | ingredients | prep | pre_heat |
-# cooking) the daemon brings ACTIVE_CORES online; otherwise it scales
-# down to IDLE_CORES. Both knobs come from /etc/default/gambit-cpu-scaler.
-# Fail-open: if the chef poll fails FAIL_OPEN_THRESHOLD times in a row,
-# all cores come back online so a misconfigured device is never wedged
-# at 1 core during a real cook.
+# Polls chef every POLL_INTERVAL seconds. Active flow phase
+# (analyzing | tools | ingredients | prep | pre_heat | cooking) → bring
+# ACTIVE_CORES online; otherwise scale down to IDLE_CORES. Both knobs
+# come from /etc/default/gambit-cpu-scaler.
 #
-# cpu0 is never touched. The Linux kernel can't offline the boot CPU on
-# most ARM platforms; attempting it returns EBUSY.
+# cpu0 is never touched — the Linux kernel can't offline the boot CPU
+# on most ARM platforms (returns EBUSY).
 #
-# Logging discipline: only the per-core decision (`cpuN online=…`)
-# reaches journald via `logger`. The raw `viam` output is captured to a
-# local var and grep'd — never echoed, never logged. Chef snapshots can
-# carry recipe titles / voice transcripts, which don't belong here.
+# Chef snapshots can carry recipe titles / voice transcripts, so the
+# raw `viam` output is grep'd and discarded — only per-core decisions
+# reach journald.
 
 # ----------------------------------------------------------------------
 # Knobs (env)

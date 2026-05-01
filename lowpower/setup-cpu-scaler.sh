@@ -43,9 +43,8 @@ if [[ -f "$CMDLINE_FILE" ]]; then
             cp "$CMDLINE_FILE" "$CMDLINE_BACKUP"
             echo "  backed up to $CMDLINE_BACKUP"
         fi
-        # Strip maxcpus=N (and any leading whitespace), then collapse
-        # double-spaces and trim leading/trailing whitespace so no
-        # stray tokens are left for the bootloader to parse oddly.
+        # Whitespace-collapse + trim after the strip so no stray
+        # spaces are left for the bootloader to parse oddly.
         sed -i.tmp -E \
             -e 's/[[:space:]]*maxcpus=[0-9]+//g' \
             -e 's/  +/ /g' \
