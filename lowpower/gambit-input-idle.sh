@@ -21,6 +21,12 @@ set -uo pipefail
 #     a single, edge-triggered call.
 #   - On input-stream EOF/error we exit nonzero so systemd Restart=on-failure
 #     brings us back rather than getting stuck never-dimming.
+#
+# Limitation: libinput enumerates /dev/input/* at startup. Devices attached
+# after the daemon starts (mid-session USB hotplug) are not watched. The
+# kiosk's input set is fixed (built-in DSI touchscreen, I2C buttons), so
+# this is not a production concern; restart the service if you need to
+# pick up a new input device.
 
 # bash 4+ required: we disambiguate read-timeout (rc>128) from EOF (rc=1)
 # to decide between "dim now" and "exit so systemd restarts us". Bash 3
