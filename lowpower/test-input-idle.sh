@@ -1,23 +1,26 @@
 #!/bin/bash
 set -euo pipefail
 
-# Self-contained behavioural test for gambit-input-idle.sh.
+# Self-contained behavioural tests for gambit-input-idle.sh.
 #
 # Drives the daemon with a synthetic event stream + a mock dim script,
 # then asserts the dim/restore call sequence. No /dev/input access, no
 # libinput dependency — the daemon's INPUT_CMD env var lets us swap the
 # input source.
 #
-# Runs under ~4.5 seconds. Exits 0 on pass, 1 on fail.
+# Two cases:
+#   1. Idle without active cook: idle past timeout -> dim, event -> restore,
+#      idle again -> dim. (Original behaviour.)
+#   2. Active-cook gate: cook flag set across an idle window -> no dim;
+#      flag cleared, idle past timeout -> dim. (GMBT-377 cook-aware.)
+#
+# Total runtime ~12 seconds. Exits 0 on pass, 1 on fail.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DAEMON="$SCRIPT_DIR/gambit-input-idle.sh"
 
 [[ -x "$DAEMON" ]] || { echo "FAIL: $DAEMON not executable"; exit 1; }
 
-# Find a bash 4+ to run the daemon under. Mac /bin/bash is 3.2 and conflates
-# read-timeout with EOF, defeating the daemon's transition logic; the kiosk
-# target (Trixie) is 5.x.
 BASH_BIN=
 if (( BASH_VERSINFO[0] >= 4 )); then
     BASH_BIN="$(command -v bash)"
@@ -40,48 +43,132 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 mock="$tmp/mock-dim"
-log="$tmp/log"
-input="$tmp/input-stream.sh"
-
-cat > "$mock" <<EOF
+cat > "$mock" <<'EOF'
 #!/bin/sh
-echo "\$1" >> "$log"
+echo "$1" >> "$LOG"
 EOF
 chmod +x "$mock"
 
-# Synthetic event stream: 2s silence, one event, 2s silence, EOF.
-# With IDLE_TIMEOUT_SECONDS=1 this exercises:
-#   t=0   restore (daemon startup)
-#   t=1   dim    (first timeout)
-#   t=2   restore (event arrives)
-#   t=3   dim    (second timeout)
-#   t=4   EOF -> daemon exits 1
-cat > "$input" <<'EOF'
+assert_log() {
+    local name="$1" expected="$2" actual
+    actual="$(tr '\n' ' ' < "$LOG")"
+    if [[ "$actual" == "$expected" ]]; then
+        echo "PASS [$name]: $actual"
+        return 0
+    fi
+    echo "FAIL [$name]:"
+    echo "  expected '$expected'"
+    echo "  actual   '$actual'"
+    return 1
+}
+
+# ---------------------------------------------------------------------------
+# Case 1: idle without cook -> dim/restore/dim sequence.
+# ---------------------------------------------------------------------------
+case1() {
+    export LOG="$tmp/log1"
+    : > "$LOG"
+    local input="$tmp/input1.sh"
+    cat > "$input" <<'EOF'
 #!/bin/sh
 sleep 2
 echo event
 sleep 2
 EOF
-chmod +x "$input"
+    chmod +x "$input"
 
-IDLE_TIMEOUT_SECONDS=1 \
-DIM_SCRIPT="$mock" \
-INPUT_CMD="$input" \
-    "$BASH_BIN" "$DAEMON" &
-pid=$!
+    IDLE_TIMEOUT_SECONDS=1 \
+    TICK_SECONDS=1 \
+    DIM_SCRIPT="$mock" \
+    INPUT_CMD="$input" \
+    COOK_STATE_FILE="$tmp/cook-NEVER-EXISTS" \
+        "$BASH_BIN" "$DAEMON" &
+    local pid=$!
+    sleep 4.5
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
 
-sleep 4.5
-kill "$pid" 2>/dev/null || true
-wait "$pid" 2>/dev/null || true
+    assert_log "idle-no-cook" "restore dim restore dim "
+}
 
-actual="$(tr '\n' ' ' < "$log")"
-expected="restore dim restore dim "
+# ---------------------------------------------------------------------------
+# Case 2: cook flag suppresses dim; clearing it lets dim resume.
+# ---------------------------------------------------------------------------
+case2() {
+    export LOG="$tmp/log2"
+    : > "$LOG"
+    local cook="$tmp/cook-active"
+    local input="$tmp/input2.sh"
+    # No input events at all — pure idle.
+    cat > "$input" <<'EOF'
+#!/bin/sh
+sleep 60
+EOF
+    chmod +x "$input"
 
-if [[ "$actual" == "$expected" ]]; then
-    echo "PASS: $actual"
-    exit 0
-fi
+    # Pre-create the cook flag so the daemon sees it from the first tick.
+    touch "$cook"
 
-echo "FAIL: expected '$expected'"
-echo "      actual   '$actual'"
-exit 1
+    IDLE_TIMEOUT_SECONDS=1 \
+    TICK_SECONDS=1 \
+    DIM_SCRIPT="$mock" \
+    INPUT_CMD="$input" \
+    COOK_STATE_FILE="$cook" \
+        "$BASH_BIN" "$DAEMON" &
+    local pid=$!
+
+    # Sit through 3 ticks past the idle timeout while cook is active.
+    # No dim should fire; only the startup restore is in the log.
+    sleep 3.5
+
+    # Clear the cook flag. Within ~1 tick + idle window the daemon should
+    # observe idle_for>threshold AND no cook -> dim.
+    rm "$cook"
+    sleep 2.5
+
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+
+    assert_log "cook-gate" "restore dim "
+}
+
+# ---------------------------------------------------------------------------
+# Case 3: dimmed -> cook starts -> daemon restores within one tick.
+# ---------------------------------------------------------------------------
+case3() {
+    export LOG="$tmp/log3"
+    : > "$LOG"
+    local cook="$tmp/cook-active-3"
+    local input="$tmp/input3.sh"
+    cat > "$input" <<'EOF'
+#!/bin/sh
+sleep 60
+EOF
+    chmod +x "$input"
+
+    IDLE_TIMEOUT_SECONDS=1 \
+    TICK_SECONDS=1 \
+    DIM_SCRIPT="$mock" \
+    INPUT_CMD="$input" \
+    COOK_STATE_FILE="$cook" \
+        "$BASH_BIN" "$DAEMON" &
+    local pid=$!
+
+    # Let it idle to dim.
+    sleep 2.5
+
+    # Now start a cook. Daemon should restore on next tick.
+    touch "$cook"
+    sleep 2
+
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+
+    assert_log "dim-then-cook-restores" "restore dim restore "
+}
+
+fail=0
+case1 || fail=1
+case2 || fail=1
+case3 || fail=1
+exit "$fail"

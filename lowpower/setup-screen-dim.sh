@@ -40,6 +40,10 @@ USER_SYSTEMD_DIR="$USER_HOME/.config/systemd/user"
 SERVICE_FILE="$USER_SYSTEMD_DIR/gambit-idle-dim.service"
 
 IDLE_TIMEOUT_SECONDS="${IDLE_TIMEOUT_SECONDS:-300}"
+# Path chef will touch while a cook session is active. Daemon won't dim
+# while the file exists; restores within one tick if the file appears
+# during a dimmed period.
+COOK_STATE_FILE="${COOK_STATE_FILE:-/run/gambit/cook-active}"
 
 [[ -f "$DIM_SCRIPT_SRC" ]] || die "dim.sh missing in $SCRIPT_DIR"
 [[ -f "$DAEMON_SRC" ]] || die "gambit-input-idle.sh missing in $SCRIPT_DIR"
@@ -80,6 +84,7 @@ mkdir -p "$USER_SYSTEMD_DIR"
 sed \
     -e "s|%IDLE_TIMEOUT_SECONDS%|$IDLE_TIMEOUT_SECONDS|g" \
     -e "s|%DIM_SCRIPT%|$DIM_SCRIPT_DST|g" \
+    -e "s|%COOK_STATE_FILE%|$COOK_STATE_FILE|g" \
     "$SERVICE_TEMPLATE" > "$SERVICE_FILE"
 chown -R "$TARGET_USER:$TARGET_USER" "$USER_HOME/.config/systemd"
 
@@ -99,10 +104,11 @@ sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="/run/user/$(id -u "$TARGET_USER")" \
 
 echo ""
 echo "=== Screen Dim Installed ==="
-echo "  service: ~$TARGET_USER/.config/systemd/user/gambit-idle-dim.service"
-echo "  daemon:  $DAEMON_DST"
-echo "  script:  $DIM_SCRIPT_DST"
-echo "  timeout: ${IDLE_TIMEOUT_SECONDS}s"
+echo "  service:    ~$TARGET_USER/.config/systemd/user/gambit-idle-dim.service"
+echo "  daemon:     $DAEMON_DST"
+echo "  script:     $DIM_SCRIPT_DST"
+echo "  timeout:    ${IDLE_TIMEOUT_SECONDS}s"
+echo "  cook flag:  $COOK_STATE_FILE (chef writes; daemon suppresses dim while present)"
 echo ""
 echo "Next session start (kiosk relogin or reboot) will arm the watcher."
 echo "Force test: sudo -u $TARGET_USER $DIM_SCRIPT_DST dim"

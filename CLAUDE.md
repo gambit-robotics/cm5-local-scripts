@@ -14,3 +14,16 @@ workspace-level `CLAUDE.md` at `../CLAUDE.md` — read that first.
   the compositor, not subject to the inhibit protocol). See
   `lowpower/gambit-input-idle.sh`. Same trick generalises to any other
   below-compositor idle / activity check we might want on this platform.
+
+## Cross-repo contracts
+
+- **`/run/gambit/cook-active` (chef → gambit-input-idle daemon)**: chef
+  creates this file when a cook session starts and removes it when the
+  session ends. While the file exists, the lowpower screen-dim daemon
+  (`lowpower/gambit-input-idle.sh`) suppresses dim regardless of input
+  idle time, and restores within one tick (default 5s) if the file
+  appears during a dimmed period. File contents are ignored — presence
+  is the signal. Path is configurable via the `COOK_STATE_FILE` env var
+  on the daemon's systemd unit (defaulted at install time). To minimise
+  stale-file risk on chef crash, chef should remove the file at process
+  start.
