@@ -1,0 +1,14 @@
+[Unit]
+Description=Gambit: dynamic CPU hotplug — offline cores at idle, restore on cook
+After=multi-user.target viam-server.service
+Wants=viam-server.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/gambit-cpu-scaler
+ExecStart=/opt/viam/cm5-local-scripts/lowpower/cpu-scaler.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
