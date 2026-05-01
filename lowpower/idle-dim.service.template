@@ -4,9 +4,9 @@ PartOf=graphical-session.target
 After=graphical-session.target
 
 [Service]
-ExecStart=/usr/bin/swayidle -w \
-    timeout %IDLE_TIMEOUT_SECONDS% '%DIM_SCRIPT% dim' \
-    resume '%DIM_SCRIPT% restore'
+Environment=IDLE_TIMEOUT_SECONDS=%IDLE_TIMEOUT_SECONDS%
+Environment=DIM_SCRIPT=%DIM_SCRIPT%
+ExecStart=/usr/local/bin/gambit-input-idle
 Restart=on-failure
 RestartSec=2
 
