@@ -1,0 +1,12 @@
+# Tuneable knobs for gambit-cpu-scaler.service. Edit in place, then:
+#   sudo systemctl restart gambit-cpu-scaler
+
+# Number of cores to keep online during a cook (1-4). Default 4.
+ACTIVE_CORES=4
+
+# Number of cores to keep online during idle (1-4, must be <= ACTIVE_CORES).
+# Default 1.
+IDLE_CORES=1
+
+# To temporarily disable dynamic scaling without uninstalling, set both
+# to 4 and: sudo systemctl restart gambit-cpu-scaler
