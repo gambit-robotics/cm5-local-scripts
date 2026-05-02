@@ -203,7 +203,6 @@ install_lowpower() {
     echo ""
     echo "=== Installing Lowpower Config ==="
     "$SCRIPT_DIR/lowpower/setup-lowpower.sh"
-    "$SCRIPT_DIR/lowpower/setup-cpu-scaler.sh"
     if [[ -n "$TARGET_USER" ]]; then
         TARGET_USER="$TARGET_USER" "$SCRIPT_DIR/lowpower/setup-screen-dim.sh"
     else

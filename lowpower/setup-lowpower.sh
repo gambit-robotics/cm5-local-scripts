@@ -10,6 +10,10 @@ set -euo pipefail
 #      we don't trust the default to stay across distro upgrades).
 #   2. gpu_mem trimmed to 76MB in /boot/firmware/config.txt (DSI panel +
 #      Plymouth + labwc fit comfortably below this).
+#   3. maxcpus= stripped from /boot/firmware/cmdline.txt so the kernel
+#      exposes all 4 cores at boot. Chef does runtime CPU hotplug from its
+#      analysis flow phase (in-process scaler, GMBT-375 in chef) and that
+#      path needs all cores enumerated.
 #
 # Bluetooth is intentionally NOT disabled — kept on for runtime BLE.
 # WiFi power_save is left untouched — Linux defaults to power_save=on.
@@ -23,7 +27,11 @@ die() { echo "Error: $*" >&2; exit 1; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="/boot/firmware/config.txt"
 CONFIG_BACKUP="/boot/firmware/config.txt.bak-pre-lowpower"
+CMDLINE_FILE="/boot/firmware/cmdline.txt"
+CMDLINE_BACKUP="/boot/firmware/cmdline.txt.bak-pre-lowpower"
 GOVERNOR_SERVICE_FILE="/etc/systemd/system/gambit-cpu-governor.service"
+OBSOLETE_SCALER_SERVICE="/etc/systemd/system/gambit-cpu-scaler.service"
+OBSOLETE_SCALER_DEFAULTS="/etc/default/gambit-cpu-scaler"
 TARGET_GOVERNOR="schedutil"
 TARGET_GPU_MEM="76"
 
@@ -77,7 +85,55 @@ else
     echo "  appended gpu_mem= line"
 fi
 
+# ---------------------------------------------------------------------------
+# 3. Strip maxcpus= from cmdline.txt so the kernel exposes all 4 cores
+#    for chef's runtime hotplug (GMBT-375). No-op on devices that already
+#    don't have a maxcpus= token.
+# ---------------------------------------------------------------------------
+echo ""
+echo "[3/4] Checking $CMDLINE_FILE for maxcpus="
+
+if [[ -f "$CMDLINE_FILE" ]]; then
+    if grep -qE '(^|[[:space:]])maxcpus=' "$CMDLINE_FILE"; then
+        if [[ ! -f "$CMDLINE_BACKUP" ]]; then
+            cp "$CMDLINE_FILE" "$CMDLINE_BACKUP"
+            echo "  backed up to $CMDLINE_BACKUP"
+        fi
+        sed -i.tmp -E \
+            -e 's/[[:space:]]*maxcpus=[0-9]+//g' \
+            -e 's/  +/ /g' \
+            -e 's/^[[:space:]]+//' \
+            -e 's/[[:space:]]+$//' \
+            "$CMDLINE_FILE"
+        rm -f "${CMDLINE_FILE}.tmp"
+        echo "  removed maxcpus= token (reboot required)"
+    else
+        echo "  no maxcpus= token present — nothing to do"
+    fi
+else
+    echo "  $CMDLINE_FILE missing — skipping (wrong device?)"
+fi
+
+# ---------------------------------------------------------------------------
+# 4. Retire the legacy bash cpu-scaler daemon if installed by an older
+#    version of this repo. Chef now does CPU hotplug in-process (GMBT-375
+#    in chef); two writers fighting /sys/.../cpuN/online would thrash.
+# ---------------------------------------------------------------------------
+echo ""
+echo "[4/4] Retiring obsolete gambit-cpu-scaler.service if present"
+
+if systemctl list-unit-files gambit-cpu-scaler.service >/dev/null 2>&1 \
+    && systemctl list-unit-files gambit-cpu-scaler.service | grep -q gambit-cpu-scaler; then
+    systemctl stop gambit-cpu-scaler.service 2>/dev/null || true
+    systemctl disable gambit-cpu-scaler.service 2>/dev/null || true
+    rm -f "$OBSOLETE_SCALER_SERVICE" "$OBSOLETE_SCALER_DEFAULTS"
+    systemctl daemon-reload
+    echo "  retired (service stopped, disabled, removed)"
+else
+    echo "  not installed — nothing to do"
+fi
+
 echo ""
 echo "=== Lowpower Config Installed ==="
-echo "Reboot required for gpu_mem change to take effect."
+echo "Reboot required for gpu_mem and cmdline.txt changes to take effect."
 echo "Run lowpower/audit-idle-power.sh to baseline the device's idle draw."
