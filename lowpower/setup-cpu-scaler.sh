@@ -1,110 +1,54 @@
 #!/bin/bash
 set -euo pipefail
 
-# Installer for the dynamic CPU hotplug daemon (gambit-cpu-scaler).
+# Deprecated: the gambit-cpu-scaler.service userspace daemon has been
+# superseded by chef's in-process CPU scaler (chef/internal/cpuscaler).
+# Two writers contending for /sys/.../cpuN/online produced races; chef's
+# scaler also avoids shelling out to `viam machines part run` for state.
 #
-# Idempotent. Safe to re-run. Pairs with setup-lowpower.sh — the
-# governor pin and gpu_mem trim live there; this script adds the
-# runtime active/idle hotplug daemon on top.
+# This script now disables and removes the old service if present, on
+# every `--lowpower` install. Idempotent: a no-op on devices where the
+# service was never installed or was already removed.
+#
+# It does NOT touch /boot/firmware/cmdline.txt. Earlier versions of this
+# script stripped `maxcpus=` from cmdline.txt to enable hot-plug; that
+# is no longer relevant. Admins who want a hard kernel-level core cap
+# (e.g. on devices with broken PSCI hot-plug) can add `maxcpus=N` to
+# cmdline.txt manually.
 
 die() { echo "Error: $*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "Run with sudo"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-DAEMON_SRC="$SCRIPT_DIR/cpu-scaler.sh"
-SERVICE_SRC="$SCRIPT_DIR/gambit-cpu-scaler.service"
-DEFAULTS_SRC="$SCRIPT_DIR/gambit-cpu-scaler.defaults"
-
-SERVICE_DST="/etc/systemd/system/gambit-cpu-scaler.service"
+SERVICE_NAME="gambit-cpu-scaler.service"
+SERVICE_DST="/etc/systemd/system/$SERVICE_NAME"
 DEFAULTS_DST="/etc/default/gambit-cpu-scaler"
 
-CMDLINE_FILE="/boot/firmware/cmdline.txt"
-CMDLINE_BACKUP="/boot/firmware/cmdline.txt.bak-pre-cpu-scaler"
+echo "=== Gambit CPU Scaler Teardown (deprecated) ==="
 
-[[ -x "$DAEMON_SRC" ]] || die "cpu-scaler.sh missing or not executable at $DAEMON_SRC"
-[[ -f "$SERVICE_SRC" ]] || die "gambit-cpu-scaler.service missing at $SERVICE_SRC"
-[[ -f "$DEFAULTS_SRC" ]] || die "gambit-cpu-scaler.defaults missing at $DEFAULTS_SRC"
+removed_any=0
 
-echo "=== Gambit CPU Scaler Setup ==="
-
-# ---------------------------------------------------------------------------
-# 1. Strip maxcpus= from cmdline.txt so the kernel exposes all cores
-#    for runtime hotplug. Backup-once.
-# ---------------------------------------------------------------------------
-echo ""
-echo "[1/4] Checking $CMDLINE_FILE for maxcpus="
-
-cmdline_changed=0
-if [[ -f "$CMDLINE_FILE" ]]; then
-    if grep -qE '(^|[[:space:]])maxcpus=' "$CMDLINE_FILE"; then
-        if [[ ! -f "$CMDLINE_BACKUP" ]]; then
-            cp "$CMDLINE_FILE" "$CMDLINE_BACKUP"
-            echo "  backed up to $CMDLINE_BACKUP"
-        fi
-        # Whitespace-collapse + trim after the strip so no stray
-        # spaces are left for the bootloader to parse oddly.
-        sed -i.tmp -E \
-            -e 's/[[:space:]]*maxcpus=[0-9]+//g' \
-            -e 's/  +/ /g' \
-            -e 's/^[[:space:]]+//' \
-            -e 's/[[:space:]]+$//' \
-            "$CMDLINE_FILE"
-        rm -f "${CMDLINE_FILE}.tmp"
-        echo "  removed maxcpus= token"
-        cmdline_changed=1
-    else
-        echo "  no maxcpus= token present — nothing to do"
-    fi
-else
-    echo "  $CMDLINE_FILE missing — skipping (wrong device?)"
+if systemctl list-unit-files "$SERVICE_NAME" --no-legend | grep -q "$SERVICE_NAME"; then
+    echo "  disabling and stopping $SERVICE_NAME"
+    systemctl disable --now "$SERVICE_NAME" 2>/dev/null || true
+    removed_any=1
 fi
 
-# ---------------------------------------------------------------------------
-# 2. Install the systemd unit.
-# ---------------------------------------------------------------------------
-echo ""
-echo "[2/4] Installing $SERVICE_DST"
-install -m 0644 "$SERVICE_SRC" "$SERVICE_DST"
+if [[ -f "$SERVICE_DST" ]]; then
+    echo "  removing $SERVICE_DST"
+    rm -f "$SERVICE_DST"
+    removed_any=1
+fi
 
-# ---------------------------------------------------------------------------
-# 3. Install the defaults file. Don't overwrite admin edits on re-run.
-# ---------------------------------------------------------------------------
-echo ""
-echo "[3/4] Installing $DEFAULTS_DST"
 if [[ -f "$DEFAULTS_DST" ]]; then
-    echo "  already present — admin edits preserved"
-else
-    install -m 0644 "$DEFAULTS_SRC" "$DEFAULTS_DST"
-    echo "  installed (edit to tune ACTIVE_CORES / IDLE_CORES)"
+    echo "  removing $DEFAULTS_DST"
+    rm -f "$DEFAULTS_DST"
+    removed_any=1
 fi
 
-# ---------------------------------------------------------------------------
-# 4. Reload systemd and enable+start the unit.
-# ---------------------------------------------------------------------------
-echo ""
-echo "[4/4] Reloading systemd and enabling gambit-cpu-scaler.service"
-systemctl daemon-reload
-systemctl enable --now gambit-cpu-scaler.service
-echo "  service: gambit-cpu-scaler.service (enabled, started)"
-
-echo ""
-echo "=== CPU Scaler Installed ==="
-echo "  daemon:   $DAEMON_SRC"
-echo "  service:  $SERVICE_DST"
-echo "  defaults: $DEFAULTS_DST"
-echo ""
-echo "Tune via /etc/default/gambit-cpu-scaler, then:"
-echo "  sudo systemctl restart gambit-cpu-scaler"
-echo ""
-echo "Note: the daemon shells out to 'viam machines part run' to query"
-echo "chef state. If the device lacks Viam CLI auth (no ~/.viam/cli.json"
-echo "for root), polls fail and the daemon falls open to all cores —"
-echo "no power saving, but no harm. To verify auth: 'sudo viam version'"
-echo "should show a logged-in profile."
-
-if (( cmdline_changed )); then
-    echo ""
-    echo "Reboot required for the kernel to expose all 4 cores (cmdline.txt changed)."
+if (( removed_any )); then
+    systemctl daemon-reload
+    echo "  done — chef's in-process scaler now owns CPU scaling"
+else
+    echo "  nothing to remove (already deprecated)"
 fi
