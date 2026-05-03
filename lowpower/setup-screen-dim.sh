@@ -55,31 +55,83 @@ echo "=== Gambit Screen Dim Setup (user=$TARGET_USER) ==="
 # 1. Install dependencies.
 # ---------------------------------------------------------------------------
 echo ""
-echo "[1/5] Ensuring libinput-tools + brightnessctl are installed"
+echo "[1/7] Ensuring libinput-tools + brightnessctl are installed"
 if [[ -z "${SKIP_APT_UPDATE:-}" ]]; then
     apt-get update -qq
 fi
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libinput-tools brightnessctl
 
 # ---------------------------------------------------------------------------
-# 2. Install dim script to /usr/local/bin.
+# 2. Grant input-device access to the target user.
+# ---------------------------------------------------------------------------
+# `libinput debug-events` reads /dev/input/event*, which is owned by the
+# `input` group on Debian (mode 0660). Without group membership the daemon
+# silently produces zero events → screen would dim after IDLE_TIMEOUT_SECONDS
+# regardless of touch input, which is the exact bug this whole change is
+# meant to fix, just inverted (always-dim instead of never-dim). usermod is
+# idempotent — re-runs are no-ops if the user is already in the group. The
+# new group membership only takes effect for sessions started AFTER this
+# change, so the kiosk session needs a relogin (or device reboot) to pick
+# it up. The preflight below catches the common-case failure (no input
+# devices visible) loudly, which beats the daemon silently mis-firing.
+echo ""
+echo "[2/7] Granting input-device access to $TARGET_USER"
+usermod -aG input "$TARGET_USER"
+if compgen -G '/dev/input/event*' >/dev/null; then
+    n=$(find /dev/input -maxdepth 1 -name 'event*' 2>/dev/null | wc -l | tr -d ' ')
+    echo "  /dev/input/event* visible (count=$n)"
+else
+    echo "  WARNING: no /dev/input/event* devices visible from this shell."
+    echo "  libinput debug-events will produce no events; the daemon will"
+    echo "  dim after timeout regardless of touch. Verify input subsystem."
+fi
+echo "  NOTE: existing sessions need to log out/in (or reboot) for the"
+echo "  group membership to take effect."
+
+# ---------------------------------------------------------------------------
+# 3. Provision /run/gambit via tmpfiles.d so chef's cook-active file write
+#    has a directory to land in regardless of who chef runs as.
+# ---------------------------------------------------------------------------
+# Chef writes /run/gambit/cook-active when a cook session is active and
+# the daemon polls it (see CLAUDE.md cross-repo contract). Chef does
+# os.MkdirAll on the directory but logs failures only at debug level —
+# if chef ever runs non-root the failure is silent and the daemon never
+# sees a cook-active flag. Provision the directory here once at install
+# time so the chef-side MkdirAll is a no-op that succeeds for any user.
+# Mode 0755: root writes inside, others can stat / read for presence.
+TMPFILES_CONF="/etc/tmpfiles.d/gambit-runtime.conf"
+echo ""
+echo "[3/7] Provisioning /run/gambit via $TMPFILES_CONF"
+cat > "$TMPFILES_CONF" <<'EOF'
+# Gambit runtime tmpfs directory. Holds /run/gambit/cook-active (chef →
+# gambit-input-idle daemon presence signal — see GMBT-377). tmpfs, so
+# nothing here persists across reboot. Mode 0755 lets root write the
+# file and any user stat it.
+d /run/gambit 0755 root root -
+EOF
+# Apply now so the directory exists immediately rather than waiting for
+# the next boot. --create is idempotent.
+systemd-tmpfiles --create "$TMPFILES_CONF"
+
+# ---------------------------------------------------------------------------
+# 4. Install dim script to /usr/local/bin.
 # ---------------------------------------------------------------------------
 echo ""
-echo "[2/5] Installing dim script to $DIM_SCRIPT_DST"
+echo "[4/7] Installing dim script to $DIM_SCRIPT_DST"
 install -m 0755 "$DIM_SCRIPT_SRC" "$DIM_SCRIPT_DST"
 
 # ---------------------------------------------------------------------------
-# 3. Install idle-watcher daemon to /usr/local/bin.
+# 5. Install idle-watcher daemon to /usr/local/bin.
 # ---------------------------------------------------------------------------
 echo ""
-echo "[3/5] Installing idle-watcher daemon to $DAEMON_DST"
+echo "[5/7] Installing idle-watcher daemon to $DAEMON_DST"
 install -m 0755 "$DAEMON_SRC" "$DAEMON_DST"
 
 # ---------------------------------------------------------------------------
-# 4. Render user service from template.
+# 6. Render user service from template.
 # ---------------------------------------------------------------------------
 echo ""
-echo "[4/5] Installing user service for $TARGET_USER (timeout=${IDLE_TIMEOUT_SECONDS}s)"
+echo "[6/7] Installing user service for $TARGET_USER (timeout=${IDLE_TIMEOUT_SECONDS}s)"
 mkdir -p "$USER_SYSTEMD_DIR"
 sed \
     -e "s|%IDLE_TIMEOUT_SECONDS%|$IDLE_TIMEOUT_SECONDS|g" \
@@ -89,10 +141,10 @@ sed \
 chown -R "$TARGET_USER:$TARGET_USER" "$USER_HOME/.config/systemd"
 
 # ---------------------------------------------------------------------------
-# 5. Reload + enable as the target user.
+# 7. Reload + enable as the target user.
 # ---------------------------------------------------------------------------
 echo ""
-echo "[5/5] Reloading user systemd and enabling gambit-idle-dim.service"
+echo "[7/7] Reloading user systemd and enabling gambit-idle-dim.service"
 loginctl enable-linger "$TARGET_USER" 2>/dev/null || true
 
 # Run the user-systemd commands as the target user. Need a runtime dir;

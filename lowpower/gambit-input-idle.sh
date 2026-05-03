@@ -67,8 +67,14 @@ apply() {
 state=restore
 "$DIM_SCRIPT" restore || true
 
+# Pipe stderr to our own stderr so libinput permission failures
+# ("failed to open /dev/input/event*: Permission denied"), missing-tool
+# errors, etc. land in journald instead of disappearing — without this
+# the daemon "works" but produces zero events, and the bug looks
+# identical to "user is touching the screen": indistinguishable from
+# the outside. Per Codex review (GMBT-377): make failure visible.
 # shellcheck disable=SC2086
-exec < <($INPUT_CMD 2>/dev/null)
+exec < <($INPUT_CMD)
 
 idle_for=0
 while :; do
