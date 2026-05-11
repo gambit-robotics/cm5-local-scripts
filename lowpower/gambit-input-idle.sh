@@ -11,19 +11,19 @@ set -uo pipefail
 #
 # Loop is tick-based: every TICK_SECONDS we drain whatever input arrived,
 # advance an idle counter, and re-evaluate the desired backlight state
-# against (idle counter) + (cook-active flag).
+# against (idle counter) + (chef active-state flags).
 #
-# Active-cook gate: chef writes the path COOK_STATE_FILE while a cook
-# session is running and removes it when the cook ends. While the file is
-# present we never dim, regardless of input idle time, and we restore on
-# the next tick if we were already dimmed when chef started the cook
-# (e.g. voice-activated start with no prior touch).
+# Chef active-state gate: chef writes COOK_STATE_FILE while a cook timer is
+# running and SESSION_STATE_FILE while a cooking session is active. While either
+# file is present we never dim, regardless of input idle time, and we restore on
+# the next tick if we were already dimmed when chef became active.
 #
 # Env:
 #   IDLE_TIMEOUT_SECONDS  default 300
 #   TICK_SECONDS          default 5  (granularity of idle counter + cook check)
 #   DIM_SCRIPT            default /usr/local/bin/gambit-dim
 #   COOK_STATE_FILE       default /run/gambit/cook-active
+#   SESSION_STATE_FILE    default /run/gambit/session-active
 #   INPUT_CMD             default "libinput debug-events" (override for tests)
 #
 # Invariants:
@@ -47,11 +47,12 @@ IDLE_TIMEOUT_SECONDS="${IDLE_TIMEOUT_SECONDS:-300}"
 TICK_SECONDS="${TICK_SECONDS:-5}"
 DIM_SCRIPT="${DIM_SCRIPT:-/usr/local/bin/gambit-dim}"
 COOK_STATE_FILE="${COOK_STATE_FILE:-/run/gambit/cook-active}"
+SESSION_STATE_FILE="${SESSION_STATE_FILE:-/run/gambit/session-active}"
 INPUT_CMD="${INPUT_CMD:-libinput debug-events}"
 
 [[ -x "$DIM_SCRIPT" ]] || { echo "Error: $DIM_SCRIPT not executable" >&2; exit 1; }
 
-cook_active() { [[ -e "$COOK_STATE_FILE" ]]; }
+chef_active() { [[ -e "$COOK_STATE_FILE" || -e "$SESSION_STATE_FILE" ]]; }
 
 apply() {
     local want="$1"
@@ -92,7 +93,7 @@ while :; do
         exit 1
     fi
 
-    if cook_active; then
+    if chef_active; then
         apply restore
     elif (( idle_for >= IDLE_TIMEOUT_SECONDS )); then
         apply dim

@@ -17,13 +17,14 @@ workspace-level `CLAUDE.md` at `../CLAUDE.md` — read that first.
 
 ## Cross-repo contracts
 
-- **`/run/gambit/cook-active` (chef → gambit-input-idle daemon)**: chef
-  creates this file when a cook session starts and removes it when the
-  session ends. While the file exists, the lowpower screen-dim daemon
+- **`/run/gambit/cook-active` and `/run/gambit/session-active` (chef →
+  gambit-input-idle daemon)**: chef creates `cook-active` while a cook
+  timer is running and `session-active` while any cooking session is
+  active. While either file exists, the lowpower screen-dim daemon
   (`lowpower/gambit-input-idle.sh`) suppresses dim regardless of input
-  idle time, and restores within one tick (default 5s) if the file
+  idle time, and restores within one tick (default 5s) if either file
   appears during a dimmed period. File contents are ignored — presence
-  is the signal. Path is configurable via the `COOK_STATE_FILE` env var
-  on the daemon's systemd unit (defaulted at install time). To minimise
-  stale-file risk on chef crash, chef should remove the file at process
-  start.
+  is the signal. Paths are configurable via `COOK_STATE_FILE` and
+  `SESSION_STATE_FILE` env vars on the daemon's systemd unit (defaulted
+  at install time). To minimise stale-file risk on chef crash, chef
+  should remove these files at process start.

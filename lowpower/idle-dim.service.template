@@ -7,6 +7,7 @@ After=graphical-session.target
 Environment=IDLE_TIMEOUT_SECONDS=%IDLE_TIMEOUT_SECONDS%
 Environment=DIM_SCRIPT=%DIM_SCRIPT%
 Environment=COOK_STATE_FILE=%COOK_STATE_FILE%
+Environment=SESSION_STATE_FILE=%SESSION_STATE_FILE%
 ExecStart=/usr/local/bin/gambit-input-idle
 Restart=on-failure
 RestartSec=2

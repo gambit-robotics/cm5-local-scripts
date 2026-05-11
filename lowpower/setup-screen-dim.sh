@@ -4,7 +4,8 @@ set -euo pipefail
 # Screen-dim user service. Installs libinput-tools + brightnessctl + the
 # gambit-input-idle daemon and a per-user gambit-idle-dim.service that
 # dims the DSI backlight after IDLE_TIMEOUT_SECONDS (default 300s = 5min)
-# of no input, restores on any input event.
+# of no input, restores on any input event, and suppresses dim while Chef
+# reports an active cook or active cooking session.
 #
 # Why not swayidle: Chromium kiosk holds zwlr_idle_inhibit_v1 on labwc,
 # so swayidle's timeout never fires. The gambit-input-idle daemon reads
@@ -40,10 +41,11 @@ USER_SYSTEMD_DIR="$USER_HOME/.config/systemd/user"
 SERVICE_FILE="$USER_SYSTEMD_DIR/gambit-idle-dim.service"
 
 IDLE_TIMEOUT_SECONDS="${IDLE_TIMEOUT_SECONDS:-300}"
-# Path chef will touch while a cook session is active. Daemon won't dim
-# while the file exists; restores within one tick if the file appears
+# Paths chef will touch while cook/session work is active. Daemon won't dim
+# while either file exists; restores within one tick if either file appears
 # during a dimmed period.
 COOK_STATE_FILE="${COOK_STATE_FILE:-/run/gambit/cook-active}"
+SESSION_STATE_FILE="${SESSION_STATE_FILE:-/run/gambit/session-active}"
 
 [[ -f "$DIM_SCRIPT_SRC" ]] || die "dim.sh missing in $SCRIPT_DIR"
 [[ -f "$DAEMON_SRC" ]] || die "gambit-input-idle.sh missing in $SCRIPT_DIR"
@@ -89,24 +91,25 @@ echo "  NOTE: existing sessions need to log out/in (or reboot) for the"
 echo "  group membership to take effect."
 
 # ---------------------------------------------------------------------------
-# 3. Provision /run/gambit via tmpfiles.d so chef's cook-active file write
+# 3. Provision /run/gambit via tmpfiles.d so chef's active-state file writes
 #    has a directory to land in regardless of who chef runs as.
 # ---------------------------------------------------------------------------
-# Chef writes /run/gambit/cook-active when a cook session is active and
-# the daemon polls it (see CLAUDE.md cross-repo contract). Chef does
+# Chef writes /run/gambit/cook-active when a cook timer is active and
+# /run/gambit/session-active when a cooking session is active. The daemon
+# polls them (see CLAUDE.md cross-repo contract). Chef does
 # os.MkdirAll on the directory but logs failures only at debug level —
 # if chef ever runs non-root the failure is silent and the daemon never
-# sees a cook-active flag. Provision the directory here once at install
+# sees the active-state flags. Provision the directory here once at install
 # time so the chef-side MkdirAll is a no-op that succeeds for any user.
 # Mode 0755: root writes inside, others can stat / read for presence.
 TMPFILES_CONF="/etc/tmpfiles.d/gambit-runtime.conf"
 echo ""
 echo "[3/7] Provisioning /run/gambit via $TMPFILES_CONF"
 cat > "$TMPFILES_CONF" <<'EOF'
-# Gambit runtime tmpfs directory. Holds /run/gambit/cook-active (chef →
-# gambit-input-idle daemon presence signal — see GMBT-377). tmpfs, so
-# nothing here persists across reboot. Mode 0755 lets root write the
-# file and any user stat it.
+# Gambit runtime tmpfs directory. Holds chef → gambit-input-idle daemon
+# presence signals (/run/gambit/cook-active and /run/gambit/session-active).
+# tmpfs, so nothing here persists across reboot. Mode 0755 lets root write
+# the files and any user stat them.
 d /run/gambit 0755 root root -
 EOF
 # Apply now so the directory exists immediately rather than waiting for
@@ -137,6 +140,7 @@ sed \
     -e "s|%IDLE_TIMEOUT_SECONDS%|$IDLE_TIMEOUT_SECONDS|g" \
     -e "s|%DIM_SCRIPT%|$DIM_SCRIPT_DST|g" \
     -e "s|%COOK_STATE_FILE%|$COOK_STATE_FILE|g" \
+    -e "s|%SESSION_STATE_FILE%|$SESSION_STATE_FILE|g" \
     "$SERVICE_TEMPLATE" > "$SERVICE_FILE"
 chown -R "$TARGET_USER:$TARGET_USER" "$USER_HOME/.config/systemd"
 
@@ -160,7 +164,8 @@ echo "  service:    ~$TARGET_USER/.config/systemd/user/gambit-idle-dim.service"
 echo "  daemon:     $DAEMON_DST"
 echo "  script:     $DIM_SCRIPT_DST"
 echo "  timeout:    ${IDLE_TIMEOUT_SECONDS}s"
-echo "  cook flag:  $COOK_STATE_FILE (chef writes; daemon suppresses dim while present)"
+echo "  cook flag:  $COOK_STATE_FILE"
+echo "  session:    $SESSION_STATE_FILE"
 echo ""
 echo "Next session start (kiosk relogin or reboot) will arm the watcher."
 echo "Force test: sudo -u $TARGET_USER $DIM_SCRIPT_DST dim"

@@ -8,11 +8,13 @@ set -euo pipefail
 # libinput dependency — the daemon's INPUT_CMD env var lets us swap the
 # input source.
 #
-# Two cases:
+# Cases:
 #   1. Idle without active cook: idle past timeout -> dim, event -> restore,
 #      idle again -> dim. (Original behaviour.)
 #   2. Active-cook gate: cook flag set across an idle window -> no dim;
 #      flag cleared, idle past timeout -> dim. (GMBT-377 cook-aware.)
+#   3. Dimmed -> cook starts -> restore.
+#   4. Active-session gate mirrors the cook gate.
 #
 # Total runtime ~12 seconds. Exits 0 on pass, 1 on fail.
 
@@ -82,6 +84,7 @@ EOF
     DIM_SCRIPT="$mock" \
     INPUT_CMD="$input" \
     COOK_STATE_FILE="$tmp/cook-NEVER-EXISTS" \
+    SESSION_STATE_FILE="$tmp/session-NEVER-EXISTS" \
         "$BASH_BIN" "$DAEMON" &
     local pid=$!
     sleep 4.5
@@ -114,6 +117,7 @@ EOF
     DIM_SCRIPT="$mock" \
     INPUT_CMD="$input" \
     COOK_STATE_FILE="$cook" \
+    SESSION_STATE_FILE="$tmp/session-NEVER-EXISTS" \
         "$BASH_BIN" "$DAEMON" &
     local pid=$!
 
@@ -151,6 +155,7 @@ EOF
     DIM_SCRIPT="$mock" \
     INPUT_CMD="$input" \
     COOK_STATE_FILE="$cook" \
+    SESSION_STATE_FILE="$tmp/session-NEVER-EXISTS" \
         "$BASH_BIN" "$DAEMON" &
     local pid=$!
 
@@ -167,8 +172,44 @@ EOF
     assert_log "dim-then-cook-restores" "restore dim restore "
 }
 
+# ---------------------------------------------------------------------------
+# Case 4: session flag suppresses dim; clearing it lets dim resume.
+# ---------------------------------------------------------------------------
+case4() {
+    export LOG="$tmp/log4"
+    : > "$LOG"
+    local session="$tmp/session-active"
+    local input="$tmp/input4.sh"
+    cat > "$input" <<'EOF'
+#!/bin/sh
+sleep 60
+EOF
+    chmod +x "$input"
+
+    touch "$session"
+
+    IDLE_TIMEOUT_SECONDS=1 \
+    TICK_SECONDS=1 \
+    DIM_SCRIPT="$mock" \
+    INPUT_CMD="$input" \
+    COOK_STATE_FILE="$tmp/cook-NEVER-EXISTS" \
+    SESSION_STATE_FILE="$session" \
+        "$BASH_BIN" "$DAEMON" &
+    local pid=$!
+
+    sleep 3.5
+    rm "$session"
+    sleep 2.5
+
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+
+    assert_log "session-gate" "restore dim "
+}
+
 fail=0
 case1 || fail=1
 case2 || fail=1
 case3 || fail=1
+case4 || fail=1
 exit "$fail"

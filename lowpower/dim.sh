@@ -10,11 +10,11 @@ set -euo pipefail
 # headless test hosts where this script is exercised by syntax-check).
 #
 # Usage:
-#   dim.sh dim         # set backlight to DIM_LEVEL (default 15%)
-#   dim.sh restore     # set backlight to FULL_LEVEL (default 100%)
+#   dim.sh dim         # set backlight to DIM_LEVEL (default 5%)
+#   dim.sh restore     # set backlight to FULL_LEVEL (default 50%)
 
-DIM_LEVEL="${DIM_LEVEL:-15%}"
-FULL_LEVEL="${FULL_LEVEL:-100%}"
+DIM_LEVEL="${DIM_LEVEL:-5%}"
+FULL_LEVEL="${FULL_LEVEL:-50%}"
 
 mode="${1:-restore}"
 case "$mode" in
@@ -31,7 +31,7 @@ fi
 # Fallback: software gamma via wlr-randr. No power saving but at least the
 # screen visibly dims so the user can tell the script is wired up.
 if command -v wlr-randr >/dev/null 2>&1; then
-    # Convert "15%" to "0.15"
+    # Convert "5%" to "0.05"
     pct="${target%\%}"
     ratio=$(awk -v p="$pct" 'BEGIN { printf "%.2f", p / 100 }')
     output=$(wlr-randr 2>/dev/null | awk '/^[A-Z]/ && $1 ~ /-[0-9]+$/ { print $1; exit }')
