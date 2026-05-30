@@ -1,7 +1,7 @@
 # Gambit CM5 Local Scripts
 # Run 'make' or 'make help' to see available commands
 
-.PHONY: help install uninstall update clean
+.PHONY: help install uninstall update clean image-apply image-verify image-test image-publish-r2
 
 # Auto-detect user: use USER if set, otherwise SUDO_USER, otherwise logname
 USER ?= $(or $(SUDO_USER),$(shell logname 2>/dev/null))
@@ -27,6 +27,12 @@ help:
 	@echo ""
 	@echo "Variables (USER auto-detected from sudo):"
 	@echo "  USER=<username>      Override target user (default: auto-detect)"
+	@echo ""
+	@echo "Image tooling:"
+	@echo "  make image-apply ROOTFS=/mnt/root BOOTFS=/mnt/boot IMAGE_VERSION=0.1.0-dev"
+	@echo "  make image-verify ROOTFS=/mnt/root"
+	@echo "  make image-test"
+	@echo "  make image-publish-r2 RELEASE=2026-06-03-assembler-rc1 ARTIFACT=dist/gambit.img.xz"
 
 # ------------------------------------------------------------------------------
 # Pi Commands (run after cloning repo)
@@ -107,3 +113,37 @@ update-plymouth:
 
 clean:
 	@echo "Nothing to clean"
+
+# ------------------------------------------------------------------------------
+# Image tooling
+# ------------------------------------------------------------------------------
+
+image-apply:
+ifeq ($(ROOTFS),)
+	$(error ROOTFS is required)
+endif
+ifeq ($(BOOTFS),)
+	$(error BOOTFS is required)
+endif
+ifeq ($(IMAGE_VERSION),)
+	$(error IMAGE_VERSION is required)
+endif
+	sudo image/apply-rootfs.sh --rootfs "$(ROOTFS)" --bootfs "$(BOOTFS)" --image-version "$(IMAGE_VERSION)" $(if $(VIAM_DEFAULTS),--viam-defaults "$(VIAM_DEFAULTS)",)
+
+image-verify:
+ifeq ($(ROOTFS),)
+	$(error ROOTFS is required)
+endif
+	image/verify-rootfs.sh --rootfs "$(ROOTFS)"
+
+image-test:
+	image/test-verify-rootfs.sh
+
+image-publish-r2:
+ifeq ($(RELEASE),)
+	$(error RELEASE is required)
+endif
+ifeq ($(ARTIFACT),)
+	$(error ARTIFACT is required)
+endif
+	image/publish-r2.sh --release "$(RELEASE)" --artifact "$(ARTIFACT)" $(if $(ROOTFS),--rootfs "$(ROOTFS)",) $(if $(R2_BUCKET),--bucket "$(R2_BUCKET)",) $(if $(R2_PREFIX),--prefix "$(R2_PREFIX)",) $(if $(R2_ENDPOINT_URL),--endpoint-url "$(R2_ENDPOINT_URL)",) $(if $(PRINT_URLS),--print-urls,) $(if $(DRY_RUN),--dry-run,)

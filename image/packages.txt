@@ -1,0 +1,24 @@
+# Runtime packages expected in the baked CM5 rootfs.
+#
+# Keep this list stable and version/pin it in the outer image build pipeline.
+# Do not rely on "latest" package state for production images.
+
+alsa-utils
+brightnessctl
+build-essential
+chromium
+curl
+i2c-tools
+libinput-tools
+libopencv-dev
+libsqlite3-0
+libsqlite3-dev
+pkg-config
+plymouth
+plymouth-themes
+python3
+python3-opencv
+python3-smbus
+sqlite3
+swaybg
+wlrctl
