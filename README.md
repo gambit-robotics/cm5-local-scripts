@@ -28,6 +28,24 @@ User is auto-detected from `sudo`. Override with `USER=gambitadmin` if needed.
 
 ---
 
+## Base Image Tooling
+
+The V1 golden-image work starts under [`image/`](image/). The current tooling
+applies the Gambit runtime layer to already-mounted Raspberry Pi OS root and
+boot filesystems, then verifies the no-secrets image contract.
+
+```bash
+make image-apply ROOTFS=/mnt/gambit-root BOOTFS=/mnt/gambit-boot IMAGE_VERSION=0.1.0-dev
+make image-verify ROOTFS=/mnt/gambit-root
+make image-test
+```
+
+This does not yet flash or partition an image. It is the pre-bake layer that the
+outer Linux image builder will call after installing the package set in
+`image/packages.txt`.
+
+---
+
 ## Unified Installation
 
 The `install.sh` script supports modular installation. Use `make` targets or call directly:
