@@ -69,4 +69,23 @@ if "$VERIFY" --rootfs "$secret_root" >/dev/null 2>&1; then
     exit 1
 fi
 
+gssapi_root="$tmp/gssapi"
+make_rootfs "$gssapi_root"
+mkdir -p "$gssapi_root/etc/ssh"
+cat > "$gssapi_root/etc/ssh/ssh_config" <<'EOF'
+#   GSSAPIKeyExchange no
+EOF
+"$VERIFY" --rootfs "$gssapi_root" >/dev/null
+
+chromium_key_root="$tmp/chromium-key"
+make_rootfs "$chromium_key_root"
+mkdir -p "$chromium_key_root/etc/chromium.d"
+cat > "$chromium_key_root/etc/chromium.d/apikeys" <<'EOF'
+export GOOGLE_API_KEY="AIzaSyCkfPOPZXDKNn8hhgu3JrA62wIgC93d44k"
+EOF
+if "$VERIFY" --rootfs "$chromium_key_root" >/dev/null 2>&1; then
+    echo "expected chromium API key fixture to fail" >&2
+    exit 1
+fi
+
 echo "verify-rootfs tests passed."
