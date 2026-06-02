@@ -89,6 +89,10 @@ install_file 0644 "$REPO_DIR/config/asound.conf" "$ROOTFS/etc/asound.conf"
 install_file 0644 "$REPO_DIR/config/logind-power-button.conf" \
     "$ROOTFS/etc/systemd/logind.conf.d/50-gambit-power-button.conf"
 
+# Raspberry Pi's chromium package may install a Google API key env file. The
+# Gambit image should not bake third-party API keys, even package defaults.
+rm -f "$ROOTFS/etc/chromium.d/apikeys"
+
 # Runtime directories. /run is tmpfs and created on boot.
 write_file 0644 "$ROOTFS/etc/tmpfiles.d/gambit-runtime.conf" <<'EOF'
 # Gambit runtime tmpfs directory. Holds /run/gambit/cook-active and
