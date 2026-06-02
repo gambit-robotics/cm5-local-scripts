@@ -103,7 +103,7 @@ cat > "$KIOSK_SCRIPT" << 'KIOSK_EOF'
 #!/bin/bash
 
 KIOSK_URL="http://127.0.0.1:8765/kiosk/help"
-MAX_WAIT=60
+READY_LOG_INTERVAL=30
 
 echo "Waiting for Wayland display (max 180s)..."
 for i in $(seq 1 180); do
@@ -120,17 +120,16 @@ if [[ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]]; then
 fi
 
 # Wait for web server (splash wallpaper stays visible during this wait)
-echo "Waiting for web server on $KIOSK_URL (max ${MAX_WAIT}s)..."
+echo "Waiting for web server on $KIOSK_URL..."
 waited=0
-while ! curl -s "$KIOSK_URL" > /dev/null; do
+while ! curl -fsS "$KIOSK_URL" >/dev/null 2>&1; do
     sleep 2
     waited=$((waited + 2))
-    if [[ $waited -ge $MAX_WAIT ]]; then
-        echo "Warning: Web server not ready after ${MAX_WAIT}s, continuing anyway..."
-        break
+    if (( waited % READY_LOG_INTERVAL == 0 )); then
+        echo "Still waiting for web server at $KIOSK_URL (${waited}s)"
     fi
 done
-echo "Web server check complete."
+echo "Web server ready after ${waited}s."
 
 # Kill any existing kiosk chromium (only for this user)
 pkill -u "$(whoami)" -f "chromium.*user-data-dir=/tmp/chromium-kiosk" 2>/dev/null || true

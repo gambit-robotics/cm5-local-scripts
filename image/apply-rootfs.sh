@@ -145,7 +145,7 @@ write_file 0755 "$ROOTFS/usr/local/bin/gambit-start-kiosk" <<'EOF'
 set -euo pipefail
 
 KIOSK_URL="${KIOSK_URL:-http://127.0.0.1:8765/kiosk/help}"
-MAX_WAIT="${MAX_WAIT:-60}"
+READY_LOG_INTERVAL="${READY_LOG_INTERVAL:-30}"
 
 echo "Waiting for Wayland display..."
 for _ in $(seq 1 180); do
@@ -156,14 +156,14 @@ for _ in $(seq 1 180); do
 done
 
 waited=0
-while ! curl -s "$KIOSK_URL" >/dev/null; do
+while ! curl -fsS "$KIOSK_URL" >/dev/null 2>&1; do
     sleep 2
     waited=$((waited + 2))
-    if [[ "$waited" -ge "$MAX_WAIT" ]]; then
-        echo "Warning: web server not ready after ${MAX_WAIT}s, launching kiosk anyway"
-        break
+    if (( waited % READY_LOG_INTERVAL == 0 )); then
+        echo "Still waiting for web server at $KIOSK_URL (${waited}s)"
     fi
 done
+echo "Web server ready after ${waited}s."
 
 pkill -u "$(whoami)" -f "chromium.*user-data-dir=/tmp/chromium-kiosk" 2>/dev/null || true
 
