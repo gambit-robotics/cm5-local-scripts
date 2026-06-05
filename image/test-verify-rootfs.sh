@@ -29,6 +29,7 @@ EOF
 SPLASH_PORT="${SPLASH_PORT:-8764}"
 python3 -m http.server "$SPLASH_PORT"
 SPLASH_URL="http://127.0.0.1:${SPLASH_PORT}/"
+WEB_FAILURE_LIMIT="${WEB_FAILURE_LIMIT:-3}"
 EOF
     chmod 0755 "$dir/usr/local/bin/gambit-start-kiosk"
     cat > "$dir/usr/local/sbin/gambit-setup-local-kiosk-user" <<'EOF'

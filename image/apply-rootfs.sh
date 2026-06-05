@@ -269,6 +269,8 @@ KIOSK_URL="${KIOSK_URL:-http://127.0.0.1:8765/kiosk/help}"
 SPLASH_PORT="${SPLASH_PORT:-8764}"
 SPLASH_DIR="${SPLASH_DIR:-/usr/local/share/gambit/kiosk-splash}"
 READY_LOG_INTERVAL="${READY_LOG_INTERVAL:-30}"
+WEB_CHECK_INTERVAL="${WEB_CHECK_INTERVAL:-5}"
+WEB_FAILURE_LIMIT="${WEB_FAILURE_LIMIT:-3}"
 
 echo "Waiting for Wayland display..."
 for _ in $(seq 1 180); do
@@ -322,6 +324,26 @@ while ! curl -fsS "$KIOSK_URL" >/dev/null 2>&1; do
     fi
 done
 echo "Web server ready after ${waited}s."
+
+(
+    failures=0
+    while kill -0 "$CHROMIUM_PID" 2>/dev/null; do
+        sleep "$WEB_CHECK_INTERVAL"
+        if curl -fsS "$KIOSK_URL" >/dev/null 2>&1; then
+            failures=0
+            continue
+        fi
+        failures=$((failures + 1))
+        echo "Kiosk web health check failed (${failures}/${WEB_FAILURE_LIMIT})"
+        if (( failures >= WEB_FAILURE_LIMIT )); then
+            echo "Kiosk web server unavailable; restarting Chromium at splash."
+            kill "$CHROMIUM_PID" 2>/dev/null || true
+            exit 0
+        fi
+    done
+) &
+WATCHDOG_PID=$!
+trap 'kill "$SPLASH_PID" "$WATCHDOG_PID" 2>/dev/null || true' EXIT
 
 wait "$CHROMIUM_PID"
 EOF

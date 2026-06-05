@@ -71,6 +71,9 @@ else
     if ! grep -Eq 'SPLASH_URL=' "$kiosk_launcher"; then
         fail "kiosk launcher does not open splash before local app is ready"
     fi
+    if ! grep -Eq 'WEB_FAILURE_LIMIT' "$kiosk_launcher"; then
+        fail "kiosk launcher does not monitor local app health after startup"
+    fi
 fi
 
 kiosk_setup="$ROOTFS/usr/local/sbin/gambit-setup-local-kiosk-user"
