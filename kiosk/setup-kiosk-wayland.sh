@@ -62,13 +62,24 @@ printf '\x00\x00\x00\x00' >> "$CURSOR_THEME_DIR/left_ptr"       # pixel: transpa
 
 # Symlink all standard cursor names to the invisible cursor
 cd "$CURSOR_THEME_DIR"
-for name in default pointer hand1 hand2 text xterm crosshair move watch wait \
-    top_left_arrow left_ptr_watch grab grabbing n-resize s-resize e-resize \
-    w-resize ne-resize nw-resize se-resize sw-resize col-resize row-resize \
-    all-scroll not-allowed no-drop copy alias context-menu help progress; do
+for name in default pointer hand1 hand2 text xterm ibeam vertical-text \
+    crosshair move watch wait progress top_left_arrow left_ptr_watch grab \
+    grabbing n-resize s-resize e-resize w-resize ne-resize nw-resize \
+    se-resize sw-resize ew-resize ns-resize nesw-resize nwse-resize \
+    col-resize row-resize sb_h_double_arrow sb_v_double_arrow all-scroll \
+    not-allowed no-drop copy alias context-menu help cell zoom-in zoom-out \
+    dnd-none dnd-move dnd-copy dnd-link crossed_circle none; do
     [[ "$name" != "left_ptr" ]] && ln -sf left_ptr "$name"
 done
 chown -R "$KIOSK_USER:$KIOSK_USER" "$(dirname "$CURSOR_THEME_DIR")"
+
+cat > /etc/udev/rules.d/90-gambit-touchscreen-calibration.rules <<'UDEVEOF'
+# The DSI panel is mounted/displayed 180 degrees from the kernel touch frame.
+# Keep touchscreen coordinates aligned with the rotated Wayland output.
+ACTION=="add|change", KERNEL=="event*", ENV{ID_INPUT_TOUCHSCREEN}=="1", ENV{LIBINPUT_CALIBRATION_MATRIX}="-1 0 1 0 -1 1"
+UDEVEOF
+udevadm control --reload-rules || true
+udevadm trigger -s input || true
 
 # Set invisible cursor in labwc environment (not rc.xml, which the accelerometer manages)
 LABWC_ENV="$USER_HOME/.config/labwc/environment"
@@ -116,7 +127,12 @@ cat > "$SPLASH_DIR/index.html" <<'SPLASH_EOF'
       color: #f5f7fb;
     }
 
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+      caret-color: transparent;
+      cursor: none;
+      user-select: none;
+    }
 
     body {
       margin: 0;
@@ -182,20 +198,20 @@ cat > "$SPLASH_DIR/index.html" <<'SPLASH_EOF'
   <script>
     const target = new URLSearchParams(window.location.search).get("target") || "http://127.0.0.1:8765/kiosk/help";
     const status = document.getElementById("status");
-    let attempts = 0;
 
     async function checkReady() {
-      attempts += 1;
-      if (attempts > 10) {
-        status.textContent = "Still starting. This can take a few minutes after setup.";
-      }
-
       try {
-        await fetch(target, { cache: "no-store", mode: "no-cors" });
-        window.location.replace(target);
+        const response = await fetch(`/state?target=${encodeURIComponent(target)}`, { cache: "no-store" });
+        const state = await response.json();
+        status.textContent = state.message || "Starting Gambit services...";
+        if (state.ready) {
+          window.location.replace(target);
+          return;
+        }
       } catch (_) {
-        window.setTimeout(checkReady, 2000);
+        status.textContent = "Starting Gambit services...";
       }
+      window.setTimeout(checkReady, 2000);
     }
 
     window.setTimeout(checkReady, 800);
@@ -204,6 +220,128 @@ cat > "$SPLASH_DIR/index.html" <<'SPLASH_EOF'
 </html>
 SPLASH_EOF
 chown "$KIOSK_USER:$KIOSK_USER" "$SPLASH_DIR/index.html"
+
+cat > /usr/local/bin/gambit-kiosk-splash-server <<'PYEOF'
+#!/usr/bin/env python3
+import argparse
+import json
+import os
+import subprocess
+import urllib.error
+import urllib.request
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+
+
+def target_ready(url: str) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=0.7):
+            return True
+    except (OSError, urllib.error.URLError):
+        return False
+
+
+def command_output(args: list[str], timeout: float = 1.0) -> str:
+    try:
+        return subprocess.run(
+            args,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=timeout,
+        ).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def viam_agent_active() -> bool:
+    return command_output(["systemctl", "is-active", "viam-agent.service"]).strip() == "active"
+
+
+def viam_agent_logs() -> str:
+    return command_output(
+        ["journalctl", "-u", "viam-agent.service", "-n", "120", "--no-pager"],
+        timeout=1.5,
+    )
+
+
+def package_count() -> int:
+    package_root = "/root/.viam/packages/data"
+    try:
+        return len([name for name in os.listdir(package_root) if not name.startswith(".")])
+    except OSError:
+        return 0
+
+
+def provisioning_state(target: str) -> dict[str, object]:
+    if target_ready(target):
+        return {"ready": True, "message": "Opening Gambit..."}
+
+    if not os.path.exists("/etc/viam.json"):
+        return {
+            "ready": False,
+            "message": "Open the Gambit app and connect with Bluetooth to finish setup.",
+        }
+
+    if not viam_agent_active():
+        return {"ready": False, "message": "Starting Viam services..."}
+
+    logs = viam_agent_logs()
+    installing = (
+        "Collecting " in logs
+        or "Installing collected packages" in logs
+        or "Using cached " in logs
+        or "Successfully installed" in logs
+        or "modmanager" in logs
+    )
+    if installing or package_count() > 0:
+        return {
+            "ready": False,
+            "message": "Configuring your robot. Downloading modules and dependencies...",
+        }
+
+    return {
+        "ready": False,
+        "message": "Configuring your robot. This can take a few minutes after Wi-Fi setup.",
+    }
+
+
+class Handler(SimpleHTTPRequestHandler):
+    def end_headers(self) -> None:
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+    def do_GET(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path == "/state":
+            target = parse_qs(parsed.query).get("target", [os.environ.get("KIOSK_URL", "")])[0]
+            body = json.dumps(provisioning_state(target)).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        return super().do_GET()
+
+    def log_message(self, fmt: str, *args: object) -> None:
+        return
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=8764)
+    args = parser.parse_args()
+    os.chdir(os.environ.get("SPLASH_DIR", "/usr/local/share/gambit/kiosk-splash"))
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
+PYEOF
+chmod 0755 /usr/local/bin/gambit-kiosk-splash-server
 
 cat > "$KIOSK_SCRIPT" << 'KIOSK_EOF'
 #!/bin/bash
@@ -232,8 +370,9 @@ fi
 # Kill any existing kiosk chromium (only for this user)
 pkill -u "$(whoami)" -f "chromium.*user-data-dir=/tmp/chromium-kiosk" 2>/dev/null || true
 pkill -u "$(whoami)" -f "python3 -m http.server $SPLASH_PORT" 2>/dev/null || true
+pkill -u "$(whoami)" -f "gambit-kiosk-splash-server.*--port $SPLASH_PORT" 2>/dev/null || true
 
-python3 -m http.server "$SPLASH_PORT" --bind 127.0.0.1 --directory "$SPLASH_DIR" >/tmp/gambit-kiosk-splash.log 2>&1 &
+SPLASH_DIR="$SPLASH_DIR" KIOSK_URL="$KIOSK_URL" gambit-kiosk-splash-server --port "$SPLASH_PORT" >/tmp/gambit-kiosk-splash.log 2>&1 &
 SPLASH_PID=$!
 trap 'kill "$SPLASH_PID" 2>/dev/null || true' EXIT
 

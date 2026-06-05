@@ -2,10 +2,11 @@
 set -euo pipefail
 
 ROOTFS=""
+BOOTFS=""
 
 usage() {
     cat <<'EOF'
-Usage: image/verify-rootfs.sh --rootfs PATH
+Usage: image/verify-rootfs.sh --rootfs PATH [--bootfs PATH]
 
 Checks a mounted rootfs for the no-secrets and BLE provisioning image contract.
 EOF
@@ -17,6 +18,7 @@ fail() { echo "FAIL: $*" >&2; failures=$((failures + 1)); }
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --rootfs) ROOTFS="${2:-}"; shift 2 ;;
+        --bootfs) BOOTFS="${2:-}"; shift 2 ;;
         --help|-h) usage; exit 0 ;;
         *) die "unknown argument: $1" ;;
     esac
@@ -24,6 +26,9 @@ done
 
 [[ -n "$ROOTFS" ]] || die "--rootfs is required"
 [[ -d "$ROOTFS" ]] || die "rootfs does not exist: $ROOTFS"
+if [[ -n "$BOOTFS" && ! -d "$BOOTFS" ]]; then
+    die "bootfs does not exist: $BOOTFS"
+fi
 
 failures=0
 
@@ -56,17 +61,74 @@ if [[ ! -f "$ROOTFS/etc/modules-load.d/gambit-i2c.conf" ]] || ! grep -Eq '^[[:sp
     fail "missing i2c-dev modules-load config for /dev/i2c-* adapters"
 fi
 
+boot_chime_service="$ROOTFS/etc/systemd/system/gambit-boot-chime.service"
+if [[ ! -f "$boot_chime_service" ]] || ! grep -Fq 'WantedBy=sysinit.target' "$boot_chime_service"; then
+    fail "boot chime is not scheduled for early sysinit startup"
+fi
+if [[ ! -L "$ROOTFS/etc/systemd/system/sysinit.target.wants/gambit-boot-chime.service" ]]; then
+    fail "gambit-boot-chime.service is not enabled for sysinit.target"
+fi
+
+touchscreen_rule="$ROOTFS/etc/udev/rules.d/90-gambit-touchscreen-calibration.rules"
+if [[ ! -f "$touchscreen_rule" ]] || ! grep -Fq 'LIBINPUT_CALIBRATION_MATRIX}="-1 0 1 0 -1 1"' "$touchscreen_rule"; then
+    fail "missing 180-degree touchscreen calibration rule"
+fi
+
+plymouth_conf="$ROOTFS/etc/plymouth/plymouthd.conf"
+if [[ ! -f "$plymouth_conf" ]] || ! grep -Eq '^Theme=gambit$' "$plymouth_conf"; then
+    fail "Plymouth default theme is not set to gambit"
+fi
+
 kiosk_splash="$ROOTFS/usr/local/share/gambit/kiosk-splash/index.html"
 if [[ ! -f "$kiosk_splash" ]] || ! grep -Eq 'Starting Gambit' "$kiosk_splash"; then
     fail "missing local kiosk startup splash page"
+fi
+
+splash_server="$ROOTFS/usr/local/bin/gambit-kiosk-splash-server"
+if [[ ! -x "$splash_server" ]]; then
+    fail "missing executable local kiosk splash state server"
+else
+    if ! grep -Fq '/state' "$splash_server"; then
+        fail "local kiosk splash state server does not expose /state"
+    fi
+    if ! grep -Fq '/etc/viam.json' "$splash_server"; then
+        fail "local kiosk splash state server does not detect BLE provisioning completion"
+    fi
+    if ! grep -Fq 'journalctl' "$splash_server"; then
+        fail "local kiosk splash state server does not inspect viam-agent progress"
+    fi
+    if ! grep -Fq 'connect with Bluetooth to finish setup' "$splash_server"; then
+        fail "local kiosk splash state server does not explain BLE setup wait"
+    fi
+    if ! grep -Fq 'Configuring your robot' "$splash_server"; then
+        fail "local kiosk splash state server does not explain post-provisioning robot setup"
+    fi
+fi
+
+ble_diag="$ROOTFS/usr/local/bin/gambit-ble-diag"
+if [[ ! -x "$ble_diag" ]]; then
+    fail "missing executable BLE provisioning diagnostic"
+else
+    if ! grep -Fq 'bluetoothctl show' "$ble_diag"; then
+        fail "BLE diagnostic does not inspect controller state"
+    fi
+    if ! grep -Fq 'viam-agent.service' "$ble_diag"; then
+        fail "BLE diagnostic does not inspect viam-agent state"
+    fi
+    if ! grep -Fq '/etc/viam.json' "$ble_diag"; then
+        fail "BLE diagnostic does not distinguish provisioned vs setup state"
+    fi
+    if ! grep -Fq 'journalctl' "$ble_diag"; then
+        fail "BLE diagnostic does not capture service logs"
+    fi
 fi
 
 kiosk_launcher="$ROOTFS/usr/local/bin/gambit-start-kiosk"
 if [[ ! -x "$kiosk_launcher" ]]; then
     fail "missing executable kiosk launcher"
 else
-    if ! grep -Eq 'python3 -m http\.server "\$SPLASH_PORT"' "$kiosk_launcher"; then
-        fail "kiosk launcher does not start local splash server"
+    if ! grep -Fq 'gambit-kiosk-splash-server --port "$SPLASH_PORT"' "$kiosk_launcher"; then
+        fail "kiosk launcher does not start local splash state server"
     fi
     if ! grep -Eq 'SPLASH_URL=' "$kiosk_launcher"; then
         fail "kiosk launcher does not open splash before local app is ready"
@@ -184,6 +246,23 @@ done < <(find "$ROOTFS/etc" "$ROOTFS/usr/local" "$ROOTFS/var/lib/gambit" -type f
 while IFS= read -r path; do
     fail "cm5-local-scripts repo material is baked: ${path#$ROOTFS/}"
 done < <(find "$ROOTFS" \( -name '.git' -o -name 'install.sh' -o -name 'uninstall.sh' -o -name 'Makefile' \) 2>/dev/null | grep -E 'cm5-local-scripts|/opt/gambit/source|/home/.*/cm5-local-scripts' || true)
+
+if [[ -n "$BOOTFS" ]]; then
+    if [[ ! -f "$BOOTFS/config.txt" ]] || ! grep -Eq '^disable_splash=1$' "$BOOTFS/config.txt"; then
+        fail "boot config does not hide the firmware splash"
+    fi
+
+    if [[ ! -f "$BOOTFS/cmdline.txt" ]]; then
+        fail "missing boot cmdline.txt"
+    else
+        cmdline="$(tr -d '\n' < "$BOOTFS/cmdline.txt")"
+        for token in quiet splash logo.nologo plymouth.ignore-serial-consoles loglevel=0 vt.global_cursor_default=0 systemd.show_status=false rd.systemd.show_status=false udev.log_level=3; do
+            if [[ " $cmdline " != *" $token "* ]]; then
+                fail "boot cmdline missing quiet splash token: $token"
+            fi
+        done
+    fi
+fi
 
 secret_pattern='((^|[^[:alnum:]])(api[_-]?key|apikey)([^[:alnum:]]|$)|cloudflare[_-]?api|atlas|mongodb://|mongodb[+]srv://|elevenlabs|anthropic|openai|gemini|sk-[A-Za-z0-9_-]{20,}|password:[[:space:]]*[^[:space:]]+)'
 while IFS= read -r path; do

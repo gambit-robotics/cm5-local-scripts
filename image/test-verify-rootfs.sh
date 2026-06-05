@@ -10,6 +10,9 @@ trap 'rm -rf "$tmp"' EXIT
 make_rootfs() {
     local dir="$1"
     mkdir -p "$dir/etc/modules-load.d" \
+        "$dir/etc/plymouth" \
+        "$dir/etc/udev/rules.d" \
+        "$dir/etc/systemd/system/sysinit.target.wants" \
         "$dir/etc/systemd/system/multi-user.target.wants" \
         "$dir/etc/xdg/labwc" \
         "$dir/usr/include/python3.13" \
@@ -22,6 +25,22 @@ make_rootfs() {
         "$dir/var/lib/gambit"
     touch "$dir/usr/include/python3.13/Python.h"
     echo i2c-dev > "$dir/etc/modules-load.d/gambit-i2c.conf"
+    cat > "$dir/etc/udev/rules.d/90-gambit-touchscreen-calibration.rules" <<'EOF'
+ACTION=="add|change", KERNEL=="event*", ENV{ID_INPUT_TOUCHSCREEN}=="1", ENV{LIBINPUT_CALIBRATION_MATRIX}="-1 0 1 0 -1 1"
+EOF
+    cat > "$dir/etc/systemd/system/gambit-boot-chime.service" <<'EOF'
+[Unit]
+Description=Gambit boot chime
+
+[Install]
+WantedBy=sysinit.target
+EOF
+    ln -sfn ../gambit-boot-chime.service "$dir/etc/systemd/system/sysinit.target.wants/gambit-boot-chime.service"
+    cat > "$dir/etc/plymouth/plymouthd.conf" <<'EOF'
+[Daemon]
+Theme=gambit
+ShowDelay=0
+EOF
     cat > "$dir/usr/local/share/gambit/kiosk-splash/index.html" <<'EOF'
 <!doctype html>
 <title>Starting Gambit</title>
@@ -29,11 +48,28 @@ EOF
     cat > "$dir/usr/local/bin/gambit-start-kiosk" <<'EOF'
 #!/usr/bin/env bash
 SPLASH_PORT="${SPLASH_PORT:-8764}"
-python3 -m http.server "$SPLASH_PORT"
+gambit-kiosk-splash-server --port "$SPLASH_PORT"
 SPLASH_URL="http://127.0.0.1:${SPLASH_PORT}/"
 WEB_FAILURE_LIMIT="${WEB_FAILURE_LIMIT:-3}"
 EOF
     chmod 0755 "$dir/usr/local/bin/gambit-start-kiosk"
+    cat > "$dir/usr/local/bin/gambit-kiosk-splash-server" <<'EOF'
+#!/usr/bin/env python3
+# /state
+# /etc/viam.json
+# journalctl
+# connect with Bluetooth to finish setup
+# Configuring your robot
+EOF
+    chmod 0755 "$dir/usr/local/bin/gambit-kiosk-splash-server"
+    cat > "$dir/usr/local/bin/gambit-ble-diag" <<'EOF'
+#!/usr/bin/env bash
+bluetoothctl show
+systemctl status viam-agent.service
+ls -l /etc/viam.json
+journalctl -u viam-agent.service
+EOF
+    chmod 0755 "$dir/usr/local/bin/gambit-ble-diag"
     cat > "$dir/usr/local/bin/gambit-dim" <<'EOF'
 #!/usr/bin/env bash
 FULL_LEVEL="${FULL_LEVEL:-25%}"
@@ -96,9 +132,43 @@ EOF
 EOF
 }
 
+make_bootfs() {
+    local dir="$1"
+    mkdir -p "$dir"
+    cat > "$dir/config.txt" <<'EOF'
+dtparam=i2c_arm=on
+disable_splash=1
+EOF
+    cat > "$dir/cmdline.txt" <<'EOF'
+console=serial0,115200 console=tty1 root=PARTUUID=abc rootwait quiet splash logo.nologo plymouth.ignore-serial-consoles loglevel=0 vt.global_cursor_default=0 systemd.show_status=false rd.systemd.show_status=false udev.log_level=3
+EOF
+}
+
 pass_root="$tmp/pass"
 make_rootfs "$pass_root"
 "$VERIFY" --rootfs "$pass_root" >/dev/null
+
+pass_boot="$tmp/pass-boot"
+make_bootfs "$pass_boot"
+"$VERIFY" --rootfs "$pass_root" --bootfs "$pass_boot" >/dev/null
+
+no_quiet_boot="$tmp/no-quiet-boot"
+make_bootfs "$no_quiet_boot"
+sed -i.bak 's/ quiet//' "$no_quiet_boot/cmdline.txt"
+rm -f "$no_quiet_boot/cmdline.txt.bak"
+if "$VERIFY" --rootfs "$pass_root" --bootfs "$no_quiet_boot" >/dev/null 2>&1; then
+    echo "expected missing quiet boot cmdline fixture to fail" >&2
+    exit 1
+fi
+
+no_firmware_splash_boot="$tmp/no-firmware-splash-boot"
+make_bootfs "$no_firmware_splash_boot"
+sed -i.bak '/disable_splash/d' "$no_firmware_splash_boot/config.txt"
+rm -f "$no_firmware_splash_boot/config.txt.bak"
+if "$VERIFY" --rootfs "$pass_root" --bootfs "$no_firmware_splash_boot" >/dev/null 2>&1; then
+    echo "expected missing disable_splash fixture to fail" >&2
+    exit 1
+fi
 
 hash_root="$tmp/hash"
 make_rootfs "$hash_root"
@@ -142,6 +212,14 @@ make_rootfs "$missing_i2c_dev_root"
 rm -f "$missing_i2c_dev_root/etc/modules-load.d/gambit-i2c.conf"
 if "$VERIFY" --rootfs "$missing_i2c_dev_root" >/dev/null 2>&1; then
     echo "expected missing i2c-dev modules-load fixture to fail" >&2
+    exit 1
+fi
+
+missing_touch_calibration_root="$tmp/missing-touch-calibration"
+make_rootfs "$missing_touch_calibration_root"
+rm -f "$missing_touch_calibration_root/etc/udev/rules.d/90-gambit-touchscreen-calibration.rules"
+if "$VERIFY" --rootfs "$missing_touch_calibration_root" >/dev/null 2>&1; then
+    echo "expected missing touchscreen calibration fixture to fail" >&2
     exit 1
 fi
 
