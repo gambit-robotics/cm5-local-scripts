@@ -95,11 +95,57 @@ install_file 0644 "$REPO_DIR/config/config.txt" "$BOOTFS/config.txt"
 install_file 0644 "$REPO_DIR/config/asound.conf" "$ROOTFS/etc/asound.conf"
 install_file 0644 "$REPO_DIR/config/logind-power-button.conf" \
     "$ROOTFS/etc/systemd/logind.conf.d/50-gambit-power-button.conf"
+
+if [[ -f "$BOOTFS/cmdline.txt" ]]; then
+    cmdline="$(tr -d '\n' < "$BOOTFS/cmdline.txt")"
+
+    add_cmdline_token() {
+        local token="$1"
+        if [[ " $cmdline " != *" $token "* ]]; then
+            cmdline="$cmdline $token"
+        fi
+    }
+
+    set_cmdline_key() {
+        local key="$1"
+        local value="$2"
+        local next=""
+        local token
+        for token in $cmdline; do
+            if [[ "$token" == "$key="* ]]; then
+                continue
+            fi
+            next="${next:+$next }$token"
+        done
+        cmdline="$next $key=$value"
+    }
+
+    add_cmdline_token "quiet"
+    add_cmdline_token "splash"
+    add_cmdline_token "logo.nologo"
+    add_cmdline_token "plymouth.ignore-serial-consoles"
+    set_cmdline_key "loglevel" "0"
+    set_cmdline_key "vt.global_cursor_default" "0"
+    set_cmdline_key "systemd.show_status" "false"
+    set_cmdline_key "rd.systemd.show_status" "false"
+    set_cmdline_key "udev.log_level" "3"
+
+    printf '%s\n' "$cmdline" > "$BOOTFS/cmdline.txt"
+else
+    echo "Warning: missing $BOOTFS/cmdline.txt; boot console may show kernel text" >&2
+fi
+
 write_file 0644 "$ROOTFS/etc/modules-load.d/gambit-i2c.conf" <<'EOF'
 # Expose /dev/i2c-* adapters for Viam modules and local button/sensor tooling.
 i2c-dev
 EOF
+write_file 0644 "$ROOTFS/etc/udev/rules.d/90-gambit-touchscreen-calibration.rules" <<'EOF'
+# The DSI panel is mounted/displayed 180 degrees from the kernel touch frame.
+# Keep touchscreen coordinates aligned with the rotated Wayland output.
+ACTION=="add|change", KERNEL=="event*", ENV{ID_INPUT_TOUCHSCREEN}=="1", ENV{LIBINPUT_CALIBRATION_MATRIX}="-1 0 1 0 -1 1"
+EOF
 mask_system_unit userconfig.service
+mask_system_unit dev-dri-renderD128.device
 
 # Raspberry Pi's chromium package may install a Google API key env file. The
 # Gambit image should not bake third-party API keys, even package defaults.
@@ -121,17 +167,20 @@ install_file 0644 "$REPO_DIR/audio/boot-chime.wav" \
 write_file 0644 "$ROOTFS/etc/systemd/system/gambit-boot-chime.service" <<'EOF'
 [Unit]
 Description=Gambit boot chime
-After=sound.target
+DefaultDependencies=no
+After=local-fs.target sound.target
+Before=multi-user.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/aplay -q /usr/local/share/gambit/boot-chime.wav
-TimeoutStartSec=10
+ExecStart=/bin/sh -c 'for i in $(seq 1 20); do /usr/bin/aplay -q /usr/local/share/gambit/boot-chime.wav && exit 0; sleep 0.25; done; exit 0'
+TimeoutStartSec=8
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=sysinit.target
 EOF
-enable_system_unit gambit-boot-chime.service
+install -d -m 0755 "$ROOTFS/etc/systemd/system/sysinit.target.wants"
+ln -sfn "../gambit-boot-chime.service" "$ROOTFS/etc/systemd/system/sysinit.target.wants/gambit-boot-chime.service"
 
 # Low-power system unit and runtime scripts.
 write_file 0644 "$ROOTFS/etc/systemd/system/gambit-cpu-governor.service" <<'EOF'
@@ -153,15 +202,364 @@ install_file 0755 "$REPO_DIR/lowpower/gambit-input-idle.sh" \
     "$ROOTFS/usr/local/bin/gambit-input-idle"
 install_file 0644 "$REPO_DIR/lowpower/idle-dim.service.template" \
     "$ROOTFS/usr/local/share/gambit/systemd/user/gambit-idle-dim.service.template"
+write_file 0644 "$ROOTFS/etc/systemd/system/gambit-default-brightness.service" <<'EOF'
+[Unit]
+Description=Gambit: set default display brightness
+DefaultDependencies=no
+After=local-fs.target
+Before=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'brightnessctl --quiet set 25%% || true'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+enable_system_unit gambit-default-brightness.service
+
+cursor_theme_dir="$ROOTFS/usr/share/icons/invisible-cursor/cursors"
+install -d -m 0755 "$cursor_theme_dir"
+write_file 0644 "$ROOTFS/usr/share/icons/invisible-cursor/index.theme" <<'EOF'
+[Icon Theme]
+Name=invisible-cursor
+Comment=Transparent cursor for kiosk
+EOF
+
+# Minimal Xcursor file: 1x1 fully transparent image.
+printf '\x58\x63\x75\x72' > "$cursor_theme_dir/left_ptr"
+printf '\x10\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x00\x00\x01\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x01\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x02\x00\xfd\xff' >> "$cursor_theme_dir/left_ptr"
+printf '\x01\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x1c\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x24\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x02\x00\xfd\xff' >> "$cursor_theme_dir/left_ptr"
+printf '\x01\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x01\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x01\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x01\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x00\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x00\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x00\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x00\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+chmod 0644 "$cursor_theme_dir/left_ptr"
+for name in default pointer hand1 hand2 text xterm ibeam vertical-text \
+    crosshair move watch wait progress top_left_arrow left_ptr_watch grab \
+    grabbing n-resize s-resize e-resize w-resize ne-resize nw-resize \
+    se-resize sw-resize ew-resize ns-resize nesw-resize nwse-resize \
+    col-resize row-resize sb_h_double_arrow sb_v_double_arrow all-scroll \
+    not-allowed no-drop copy alias context-menu help cell zoom-in zoom-out \
+    dnd-none dnd-move dnd-copy dnd-link crossed_circle none; do
+    [[ "$name" != "left_ptr" ]] && ln -sfn left_ptr "$cursor_theme_dir/$name"
+done
 
 # Local kiosk session. The image deliberately creates no login password; LightDM
 # autologin owns the physical touchscreen session.
+write_file 0644 "$ROOTFS/usr/local/share/gambit/kiosk-splash/index.html" <<'EOF'
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Starting Gambit</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #1a1d23;
+      color: #f5f7fb;
+    }
+
+    * {
+      box-sizing: border-box;
+      caret-color: transparent;
+      cursor: none;
+      user-select: none;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 50% 35%, rgba(63, 96, 142, 0.24), transparent 34%),
+        #1a1d23;
+    }
+
+    main {
+      width: min(86vw, 560px);
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.4rem, 8vw, 4.2rem);
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 1.2rem 0 0;
+      color: #c6cedc;
+      font-size: clamp(1.15rem, 3vw, 1.55rem);
+      line-height: 1.45;
+    }
+
+    .bar {
+      position: relative;
+      overflow: hidden;
+      width: min(70vw, 380px);
+      height: 10px;
+      margin: 2.2rem auto 0;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .bar::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      width: 42%;
+      border-radius: inherit;
+      background: #7ea4ff;
+      animation: loading 1.35s ease-in-out infinite;
+    }
+
+    @keyframes loading {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(240%); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Starting Gambit</h1>
+    <p id="status">Starting local services...</p>
+    <div class="bar" aria-hidden="true"></div>
+  </main>
+  <script>
+    const target = new URLSearchParams(window.location.search).get("target") || "http://127.0.0.1:8765/kiosk/help";
+    const status = document.getElementById("status");
+
+    async function checkReady() {
+      try {
+        const response = await fetch(`/state?target=${encodeURIComponent(target)}`, { cache: "no-store" });
+        const state = await response.json();
+        status.textContent = state.message || "Starting Gambit services...";
+        if (state.ready) {
+          window.location.replace(target);
+          return;
+        }
+      } catch (_) {
+        status.textContent = "Starting Gambit services...";
+      }
+      window.setTimeout(checkReady, 2000);
+    }
+
+    window.setTimeout(checkReady, 800);
+  </script>
+</body>
+</html>
+EOF
+
+write_file 0755 "$ROOTFS/usr/local/bin/gambit-kiosk-splash-server" <<'EOF'
+#!/usr/bin/env python3
+import argparse
+import json
+import os
+import subprocess
+import urllib.error
+import urllib.request
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+
+
+def target_ready(url: str) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=0.7):
+            return True
+    except (OSError, urllib.error.URLError):
+        return False
+
+
+def command_output(args: list[str], timeout: float = 1.0) -> str:
+    try:
+        return subprocess.run(
+            args,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=timeout,
+        ).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def viam_agent_active() -> bool:
+    return command_output(["systemctl", "is-active", "viam-agent.service"]).strip() == "active"
+
+
+def viam_agent_logs() -> str:
+    return command_output(
+        ["journalctl", "-u", "viam-agent.service", "-n", "120", "--no-pager"],
+        timeout=1.5,
+    )
+
+
+def package_count() -> int:
+    package_root = "/root/.viam/packages/data"
+    try:
+        return len([name for name in os.listdir(package_root) if not name.startswith(".")])
+    except OSError:
+        return 0
+
+
+def provisioning_state(target: str) -> dict[str, object]:
+    if target_ready(target):
+        return {"ready": True, "message": "Opening Gambit..."}
+
+    if not os.path.exists("/etc/viam.json"):
+        return {
+            "ready": False,
+            "message": "Open the Gambit app and connect with Bluetooth to finish setup.",
+        }
+
+    if not viam_agent_active():
+        return {"ready": False, "message": "Starting Viam services..."}
+
+    logs = viam_agent_logs()
+    installing = (
+        "Collecting " in logs
+        or "Installing collected packages" in logs
+        or "Using cached " in logs
+        or "Successfully installed" in logs
+        or "modmanager" in logs
+    )
+    if installing or package_count() > 0:
+        return {
+            "ready": False,
+            "message": "Configuring your robot. Downloading modules and dependencies...",
+        }
+
+    return {
+        "ready": False,
+        "message": "Configuring your robot. This can take a few minutes after Wi-Fi setup.",
+    }
+
+
+class Handler(SimpleHTTPRequestHandler):
+    def end_headers(self) -> None:
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+    def do_GET(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path == "/state":
+            target = parse_qs(parsed.query).get("target", [os.environ.get("KIOSK_URL", "")])[0]
+            body = json.dumps(provisioning_state(target)).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        return super().do_GET()
+
+    def log_message(self, fmt: str, *args: object) -> None:
+        return
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=8764)
+    args = parser.parse_args()
+    os.chdir(os.environ.get("SPLASH_DIR", "/usr/local/share/gambit/kiosk-splash"))
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
+EOF
+
+write_file 0755 "$ROOTFS/usr/local/bin/gambit-ble-diag" <<'EOF'
+#!/usr/bin/env bash
+set -uo pipefail
+
+section() {
+    printf '\n== %s ==\n' "$1"
+}
+
+run() {
+    printf '$ %s\n' "$*"
+    "$@" 2>&1 || true
+}
+
+section "time"
+run date --iso-8601=seconds
+run uptime
+
+section "provisioning files"
+if [[ -e /etc/viam.json ]]; then
+    echo "/etc/viam.json: present; setup advertising may already be complete"
+else
+    echo "/etc/viam.json: missing; setup advertising should be active"
+fi
+run ls -l /etc/viam.json /etc/viam-defaults.json
+if [[ -r /etc/viam-defaults.json ]]; then
+    grep -E '"manufacturer"|"model"|"hotspot_prefix"|"hotspot_interface"|"fragment_id"' /etc/viam-defaults.json || true
+fi
+
+section "services"
+run systemctl is-active bluetooth.service
+run systemctl is-active viam-agent.service
+run systemctl status bluetooth.service --no-pager -l
+run systemctl status viam-agent.service --no-pager -l
+
+section "bluetooth controller"
+run rfkill list bluetooth
+run bluetoothctl show
+if command -v btmgmt >/dev/null 2>&1; then
+    run btmgmt info
+    run btmgmt advinfo
+fi
+if command -v hciconfig >/dev/null 2>&1; then
+    run hciconfig -a
+fi
+
+section "recent bluetooth logs"
+journalctl -u bluetooth.service -b --no-pager -n 160 2>&1 || true
+
+section "recent viam-agent ble/provisioning logs"
+journalctl -u viam-agent.service -b --no-pager -n 500 2>&1 \
+    | grep -iE 'ble|bluetooth|advertis|gatt|provision|setup|viam.json|viam-defaults|error|failed|panic|rfkill' \
+    || true
+
+cat <<'DIAG'
+
+Interpretation:
+- If bluetooth.service is inactive, rfkill is blocked, or bluetoothctl show lacks Powered: yes, this is the Pi Bluetooth stack.
+- If Bluetooth is powered but /etc/viam.json is missing and viam-agent logs do not show setup advertising, this is the viam-agent provisioning advertiser path.
+- If advertising is present in logs but the app cannot see it, compare with a generic BLE scanner to separate app scan behavior from device advertising.
+- If /etc/viam.json is present, the device may be past BLE setup and no longer expected to advertise setup.
+DIAG
+EOF
+
 write_file 0755 "$ROOTFS/usr/local/bin/gambit-start-kiosk" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
 KIOSK_URL="${KIOSK_URL:-http://127.0.0.1:8765/kiosk/help}"
+SPLASH_PORT="${SPLASH_PORT:-8764}"
+SPLASH_DIR="${SPLASH_DIR:-/usr/local/share/gambit/kiosk-splash}"
 READY_LOG_INTERVAL="${READY_LOG_INTERVAL:-30}"
+WEB_CHECK_INTERVAL="${WEB_CHECK_INTERVAL:-5}"
+WEB_FAILURE_LIMIT="${WEB_FAILURE_LIMIT:-3}"
 
 echo "Waiting for Wayland display..."
 for _ in $(seq 1 180); do
@@ -171,19 +569,23 @@ for _ in $(seq 1 180); do
     sleep 1
 done
 
-waited=0
-while ! curl -fsS "$KIOSK_URL" >/dev/null 2>&1; do
-    sleep 2
-    waited=$((waited + 2))
-    if (( waited % READY_LOG_INTERVAL == 0 )); then
-        echo "Still waiting for web server at $KIOSK_URL (${waited}s)"
-    fi
-done
-echo "Web server ready after ${waited}s."
+if [[ -z "${XDG_RUNTIME_DIR:-}" || -z "${WAYLAND_DISPLAY:-}" || ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]]; then
+    echo "Error: Wayland display never appeared. Exiting."
+    exit 1
+fi
 
 pkill -u "$(whoami)" -f "chromium.*user-data-dir=/tmp/chromium-kiosk" 2>/dev/null || true
+pkill -u "$(whoami)" -f "python3 -m http.server $SPLASH_PORT" 2>/dev/null || true
+pkill -u "$(whoami)" -f "gambit-kiosk-splash-server.*--port $SPLASH_PORT" 2>/dev/null || true
 
-exec chromium \
+SPLASH_DIR="$SPLASH_DIR" KIOSK_URL="$KIOSK_URL" gambit-kiosk-splash-server --port "$SPLASH_PORT" >/tmp/gambit-kiosk-splash.log 2>&1 &
+SPLASH_PID=$!
+trap 'kill "$SPLASH_PID" 2>/dev/null || true' EXIT
+
+encoded_target="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$KIOSK_URL")"
+SPLASH_URL="http://127.0.0.1:${SPLASH_PORT}/?target=${encoded_target}"
+
+chromium \
     --ozone-platform=wayland \
     --touch-events=enabled \
     --password-store=basic \
@@ -200,7 +602,40 @@ exec chromium \
     --disable-renderer-backgrounding \
     --disable-backgrounding-occluded-windows \
     --disable-ipc-flooding-protection \
-    "$KIOSK_URL"
+    "$SPLASH_URL" &
+CHROMIUM_PID=$!
+
+waited=0
+while ! curl -fsS "$KIOSK_URL" >/dev/null 2>&1; do
+    sleep 2
+    waited=$((waited + 2))
+    if (( waited % READY_LOG_INTERVAL == 0 )); then
+        echo "Still waiting for web server at $KIOSK_URL (${waited}s)"
+    fi
+done
+echo "Web server ready after ${waited}s."
+
+(
+    failures=0
+    while kill -0 "$CHROMIUM_PID" 2>/dev/null; do
+        sleep "$WEB_CHECK_INTERVAL"
+        if curl -fsS "$KIOSK_URL" >/dev/null 2>&1; then
+            failures=0
+            continue
+        fi
+        failures=$((failures + 1))
+        echo "Kiosk web health check failed (${failures}/${WEB_FAILURE_LIMIT})"
+        if (( failures >= WEB_FAILURE_LIMIT )); then
+            echo "Kiosk web server unavailable; restarting Chromium at splash."
+            kill "$CHROMIUM_PID" 2>/dev/null || true
+            exit 0
+        fi
+    done
+) &
+WATCHDOG_PID=$!
+trap 'kill "$SPLASH_PID" "$WATCHDOG_PID" 2>/dev/null || true' EXIT
+
+wait "$CHROMIUM_PID"
 EOF
 
 write_file 0644 "$ROOTFS/usr/local/share/gambit/systemd/user/kiosk.service" <<'EOF'
@@ -210,6 +645,8 @@ After=graphical-session.target
 
 [Service]
 Environment=WAYLAND_DISPLAY=wayland-0
+Environment=XCURSOR_THEME=invisible-cursor
+Environment=XCURSOR_SIZE=1
 ExecStart=/usr/local/bin/gambit-start-kiosk
 Restart=on-failure
 RestartSec=5
@@ -290,20 +727,12 @@ chown "$KIOSK_USER:$KIOSK_USER" "$user_home/.config/labwc/environment"
 install -d -m 0755 /var/lib/systemd/linger
 touch "/var/lib/systemd/linger/$KIOSK_USER"
 
-session="gambit-labwc"
-if [[ ! -f /usr/share/wayland-sessions/gambit-labwc.desktop && -d /usr/share/wayland-sessions ]]; then
-    while IFS= read -r candidate; do
-        session="$(basename "$candidate" .desktop)"
-        break
-    done < <(find /usr/share/wayland-sessions -maxdepth 1 -type f -iname '*labwc*.desktop' | sort)
-fi
-
 install -d -m 0755 /etc/lightdm/lightdm.conf.d
 cat > /etc/lightdm/lightdm.conf.d/12-gambit-autologin.conf <<LIGHTDM
 [Seat:*]
 autologin-user=$KIOSK_USER
 autologin-user-timeout=0
-user-session=$session
+user-session=gambit-labwc
 LIGHTDM
 
 if [[ -f /etc/xdg/labwc/autostart ]] && [[ ! -f /etc/xdg/labwc/autostart.bak ]]; then
@@ -322,7 +751,7 @@ systemctl mask dev-dri-renderD128.device >/dev/null 2>&1 || true
 
 install -d -m 0755 "$(dirname "$MARKER")"
 printf 'configured_at=%s\nuser=%s\nsession=%s\nuid=%s\n' \
-    "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$KIOSK_USER" "$session" "$user_id" > "$MARKER"
+    "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$KIOSK_USER" "gambit-labwc" "$user_id" > "$MARKER"
 EOF
 
 write_file 0644 "$ROOTFS/etc/systemd/system/gambit-kiosk-local-user.service" <<'EOF'
@@ -442,6 +871,12 @@ install -d -m 0755 "$plymouth_dir"
 install_file 0644 "$REPO_DIR/plymouth/SplashLoading.png" "$plymouth_dir/splash.png"
 install_file 0644 "$REPO_DIR/plymouth/SplashShutdown.png" "$plymouth_dir/shutdown-splash.png"
 install_file 0644 "$REPO_DIR/plymouth/dot.png" "$plymouth_dir/dot.png"
+write_file 0644 "$ROOTFS/etc/plymouth/plymouthd.conf" <<'EOF'
+[Daemon]
+Theme=gambit
+ShowDelay=0
+DeviceTimeout=8
+EOF
 write_file 0644 "$plymouth_dir/gambit.plymouth" <<'EOF'
 [Plymouth Theme]
 Name=gambit
@@ -467,6 +902,6 @@ write_file 0644 "$ROOTFS/etc/gambit/image-build.json" <<EOF
 }
 EOF
 
-"$SCRIPT_DIR/verify-rootfs.sh" --rootfs "$ROOTFS"
+"$SCRIPT_DIR/verify-rootfs.sh" --rootfs "$ROOTFS" --bootfs "$BOOTFS"
 
 echo "Gambit CM5 image layer applied."

@@ -1,12 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-# Boot chime setup: plays Gambit's welcome chime early in boot via systemd.
+# Boot chime setup: plays Gambit's prep validation success chime early in boot via systemd.
 # Gives audible "the device is powering on" feedback while the DSI panel is
 # still dark during kernel init (see GMBT-156).
 #
 # Source of truth for boot-chime.wav:
-#   chef/internal/speech/adapters/chime/sounds/welcomeSound.wav
+#   chef/internal/speech/adapters/chime/sounds/validationSuccess.wav
 # If that file is rebranded, sync this copy.
 
 die() { echo "Error: $*" >&2; exit 1; }

@@ -43,6 +43,9 @@ arm_64bit=1
 # Disable compensation for displays with overscan
 disable_overscan=1
 
+# Hide the firmware rainbow screen; Plymouth/local kiosk splash owns boot UI.
+disable_splash=1
+
 # Run as fast as firmware / board allows
 arm_boost=1
 

@@ -68,6 +68,7 @@ should use short-lived signed URLs.
 - `/run/gambit` tmpfiles config
 - boot chime asset and systemd unit
 - CPU governor unit
+- default screen brightness unit at 25%
 - kiosk, buttons, and idle-dim runtime scripts/templates under `/usr/local` and
   `/usr/local/share/gambit`
 - Plymouth assets/theme files

@@ -38,8 +38,10 @@ DIM_SCRIPT_DST="/usr/local/bin/gambit-dim"
 DAEMON_DST="/usr/local/bin/gambit-input-idle"
 USER_SYSTEMD_DIR="$USER_HOME/.config/systemd/user"
 SERVICE_FILE="$USER_SYSTEMD_DIR/gambit-idle-dim.service"
+DEFAULT_BRIGHTNESS_SERVICE="/etc/systemd/system/gambit-default-brightness.service"
 
 IDLE_TIMEOUT_SECONDS="${IDLE_TIMEOUT_SECONDS:-300}"
+DEFAULT_BRIGHTNESS_LEVEL="${DEFAULT_BRIGHTNESS_LEVEL:-25%}"
 # Path chef will touch while a cook session is active. Daemon won't dim
 # while the file exists; restores within one tick if the file appears
 # during a dimmed period.
@@ -55,7 +57,7 @@ echo "=== Gambit Screen Dim Setup (user=$TARGET_USER) ==="
 # 1. Install dependencies.
 # ---------------------------------------------------------------------------
 echo ""
-echo "[1/7] Ensuring libinput-tools + brightnessctl are installed"
+echo "[1/8] Ensuring libinput-tools + brightnessctl are installed"
 if [[ -z "${SKIP_APT_UPDATE:-}" ]]; then
     apt-get update -qq
 fi
@@ -75,7 +77,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libinput-tools brightnessc
 # it up. The preflight below catches the common-case failure (no input
 # devices visible) loudly, which beats the daemon silently mis-firing.
 echo ""
-echo "[2/7] Granting input-device access to $TARGET_USER"
+echo "[2/8] Granting input-device access to $TARGET_USER"
 usermod -aG input "$TARGET_USER"
 if compgen -G '/dev/input/event*' >/dev/null; then
     n=$(find /dev/input -maxdepth 1 -name 'event*' 2>/dev/null | wc -l | tr -d ' ')
@@ -101,7 +103,7 @@ echo "  group membership to take effect."
 # Mode 0755: root writes inside, others can stat / read for presence.
 TMPFILES_CONF="/etc/tmpfiles.d/gambit-runtime.conf"
 echo ""
-echo "[3/7] Provisioning /run/gambit via $TMPFILES_CONF"
+echo "[3/8] Provisioning /run/gambit via $TMPFILES_CONF"
 cat > "$TMPFILES_CONF" <<'EOF'
 # Gambit runtime tmpfs directory. Holds /run/gambit/cook-active (chef →
 # gambit-input-idle daemon presence signal — see GMBT-377). tmpfs, so
@@ -117,21 +119,45 @@ systemd-tmpfiles --create "$TMPFILES_CONF"
 # 4. Install dim script to /usr/local/bin.
 # ---------------------------------------------------------------------------
 echo ""
-echo "[4/7] Installing dim script to $DIM_SCRIPT_DST"
+echo "[4/8] Installing dim script to $DIM_SCRIPT_DST"
 install -m 0755 "$DIM_SCRIPT_SRC" "$DIM_SCRIPT_DST"
 
 # ---------------------------------------------------------------------------
-# 5. Install idle-watcher daemon to /usr/local/bin.
+# 5. Set normal screen brightness at boot.
 # ---------------------------------------------------------------------------
 echo ""
-echo "[5/7] Installing idle-watcher daemon to $DAEMON_DST"
+echo "[5/8] Installing default brightness service (${DEFAULT_BRIGHTNESS_LEVEL})"
+cat > "$DEFAULT_BRIGHTNESS_SERVICE" <<EOF
+[Unit]
+Description=Gambit: set default display brightness
+DefaultDependencies=no
+After=local-fs.target
+Before=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'brightnessctl --quiet set ${DEFAULT_BRIGHTNESS_LEVEL} || true'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+chmod 0644 "$DEFAULT_BRIGHTNESS_SERVICE"
+systemctl daemon-reload
+systemctl enable --now gambit-default-brightness.service || true
+
+# ---------------------------------------------------------------------------
+# 6. Install idle-watcher daemon to /usr/local/bin.
+# ---------------------------------------------------------------------------
+echo ""
+echo "[6/8] Installing idle-watcher daemon to $DAEMON_DST"
 install -m 0755 "$DAEMON_SRC" "$DAEMON_DST"
 
 # ---------------------------------------------------------------------------
-# 6. Render user service from template.
+# 7. Render user service from template.
 # ---------------------------------------------------------------------------
 echo ""
-echo "[6/7] Installing user service for $TARGET_USER (timeout=${IDLE_TIMEOUT_SECONDS}s)"
+echo "[7/8] Installing user service for $TARGET_USER (timeout=${IDLE_TIMEOUT_SECONDS}s)"
 mkdir -p "$USER_SYSTEMD_DIR"
 sed \
     -e "s|%IDLE_TIMEOUT_SECONDS%|$IDLE_TIMEOUT_SECONDS|g" \
@@ -141,10 +167,10 @@ sed \
 chown -R "$TARGET_USER:$TARGET_USER" "$USER_HOME/.config/systemd"
 
 # ---------------------------------------------------------------------------
-# 7. Reload + enable as the target user.
+# 8. Reload + enable as the target user.
 # ---------------------------------------------------------------------------
 echo ""
-echo "[7/7] Reloading user systemd and enabling gambit-idle-dim.service"
+echo "[8/8] Reloading user systemd and enabling gambit-idle-dim.service"
 loginctl enable-linger "$TARGET_USER" 2>/dev/null || true
 
 # Run the user-systemd commands as the target user. Need a runtime dir;
@@ -159,6 +185,7 @@ echo "=== Screen Dim Installed ==="
 echo "  service:    ~$TARGET_USER/.config/systemd/user/gambit-idle-dim.service"
 echo "  daemon:     $DAEMON_DST"
 echo "  script:     $DIM_SCRIPT_DST"
+echo "  normal:     ${DEFAULT_BRIGHTNESS_LEVEL}"
 echo "  timeout:    ${IDLE_TIMEOUT_SECONDS}s"
 echo "  cook flag:  $COOK_STATE_FILE (chef writes; daemon suppresses dim while present)"
 echo ""

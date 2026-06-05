@@ -152,13 +152,13 @@ sudo plymouth quit
 
 ## Audio (Boot Chime)
 
-Plays Gambit's welcome chime as soon as ALSA is ready, giving audible "powering on" feedback before the DSI panel comes up.
+Plays Gambit's prep validation success chime as soon as ALSA is ready, giving audible "powering on" feedback before the DSI panel comes up.
 
 ```bash
 make install-audio
 ```
 
-- Asset: `/usr/local/share/gambit/boot-chime.wav` (copied from `audio/boot-chime.wav`; source of truth is `chef/internal/speech/adapters/chime/sounds/welcomeSound.wav`).
+- Asset: `/usr/local/share/gambit/boot-chime.wav` (copied from `audio/boot-chime.wav`; source of truth is `chef/internal/speech/adapters/chime/sounds/validationSuccess.wav`).
 - Service: `gambit-boot-chime.service`, ordered `After=sound.target`, `WantedBy=multi-user.target`.
 - **Volume**: the chime plays at the current ALSA `Speaker` level. If the device was muted or at 0% at last shutdown it plays silently — by design, to avoid stomping on operator settings.
 
