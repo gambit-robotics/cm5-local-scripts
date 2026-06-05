@@ -90,6 +90,16 @@ if [[ ! -L "$ROOTFS/etc/systemd/system/multi-user.target.wants/gambit-default-br
     fail "gambit-default-brightness.service is not enabled"
 fi
 
+cursor_theme="$ROOTFS/usr/share/icons/invisible-cursor/cursors/left_ptr"
+if [[ ! -f "$cursor_theme" ]] || [[ "$(wc -c < "$cursor_theme" | tr -d ' ')" != "68" ]]; then
+    fail "missing baked invisible cursor theme"
+fi
+
+kiosk_service_template="$ROOTFS/usr/local/share/gambit/systemd/user/kiosk.service"
+if [[ ! -f "$kiosk_service_template" ]] || ! grep -Fq 'Environment=XCURSOR_THEME=invisible-cursor' "$kiosk_service_template"; then
+    fail "kiosk service does not set invisible cursor theme"
+fi
+
 kiosk_setup="$ROOTFS/usr/local/sbin/gambit-setup-local-kiosk-user"
 if [[ ! -x "$kiosk_setup" ]]; then
     fail "missing executable local kiosk user setup script"

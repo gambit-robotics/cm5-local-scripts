@@ -76,6 +76,8 @@ After=graphical-session.target
 [Service]
 Environment=WAYLAND_DISPLAY=wayland-0
 ExecStart=/usr/local/bin/gambit-start-kiosk
+Environment=XCURSOR_THEME=invisible-cursor
+Environment=XCURSOR_SIZE=1
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

@@ -312,6 +312,8 @@ After=graphical-session.target
 [Service]
 Environment=WAYLAND_DISPLAY=wayland-0
 Environment=XDG_RUNTIME_DIR=/run/user/$USER_ID
+Environment=XCURSOR_THEME=invisible-cursor
+Environment=XCURSOR_SIZE=1
 ExecStart=$KIOSK_SCRIPT
 Restart=on-failure
 RestartSec=5

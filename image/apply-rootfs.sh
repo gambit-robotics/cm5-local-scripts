@@ -171,6 +171,40 @@ WantedBy=multi-user.target
 EOF
 enable_system_unit gambit-default-brightness.service
 
+cursor_theme_dir="$ROOTFS/usr/share/icons/invisible-cursor/cursors"
+install -d -m 0755 "$cursor_theme_dir"
+write_file 0644 "$ROOTFS/usr/share/icons/invisible-cursor/index.theme" <<'EOF'
+[Icon Theme]
+Name=invisible-cursor
+Comment=Transparent cursor for kiosk
+EOF
+
+# Minimal Xcursor file: 1x1 fully transparent image.
+printf '\x58\x63\x75\x72' > "$cursor_theme_dir/left_ptr"
+printf '\x10\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x00\x00\x01\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x01\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x02\x00\xfd\xff' >> "$cursor_theme_dir/left_ptr"
+printf '\x01\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x1c\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x24\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x02\x00\xfd\xff' >> "$cursor_theme_dir/left_ptr"
+printf '\x01\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x01\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x01\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x01\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x00\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x00\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x00\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+printf '\x00\x00\x00\x00' >> "$cursor_theme_dir/left_ptr"
+chmod 0644 "$cursor_theme_dir/left_ptr"
+for name in default pointer hand1 hand2 text xterm crosshair move watch wait \
+    top_left_arrow left_ptr_watch grab grabbing n-resize s-resize e-resize \
+    w-resize ne-resize nw-resize se-resize sw-resize col-resize row-resize \
+    all-scroll not-allowed no-drop copy alias context-menu help progress; do
+    [[ "$name" != "left_ptr" ]] && ln -sfn left_ptr "$cursor_theme_dir/$name"
+done
+
 # Local kiosk session. The image deliberately creates no login password; LightDM
 # autologin owns the physical touchscreen session.
 write_file 0644 "$ROOTFS/usr/local/share/gambit/kiosk-splash/index.html" <<'EOF'
@@ -372,6 +406,8 @@ After=graphical-session.target
 
 [Service]
 Environment=WAYLAND_DISPLAY=wayland-0
+Environment=XCURSOR_THEME=invisible-cursor
+Environment=XCURSOR_SIZE=1
 ExecStart=/usr/local/bin/gambit-start-kiosk
 Restart=on-failure
 RestartSec=5

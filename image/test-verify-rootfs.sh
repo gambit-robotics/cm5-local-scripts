@@ -14,7 +14,9 @@ make_rootfs() {
         "$dir/etc/xdg/labwc" \
         "$dir/usr/include/python3.13" \
         "$dir/usr/local/bin" \
+        "$dir/usr/local/share/gambit/systemd/user" \
         "$dir/usr/local/share/gambit/kiosk-splash" \
+        "$dir/usr/share/icons/invisible-cursor/cursors" \
         "$dir/usr/local/sbin" \
         "$dir/usr/share/wayland-sessions" \
         "$dir/var/lib/gambit"
@@ -37,6 +39,12 @@ EOF
 FULL_LEVEL="${FULL_LEVEL:-25%}"
 EOF
     chmod 0755 "$dir/usr/local/bin/gambit-dim"
+    dd if=/dev/zero of="$dir/usr/share/icons/invisible-cursor/cursors/left_ptr" bs=68 count=1 >/dev/null 2>&1
+    cat > "$dir/usr/local/share/gambit/systemd/user/kiosk.service" <<'EOF'
+[Service]
+Environment=XCURSOR_THEME=invisible-cursor
+Environment=XCURSOR_SIZE=1
+EOF
     cat > "$dir/etc/systemd/system/gambit-default-brightness.service" <<'EOF'
 [Unit]
 Description=Gambit: set default display brightness
