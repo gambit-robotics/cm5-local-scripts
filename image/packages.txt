@@ -9,6 +9,7 @@ build-essential
 chromium
 curl
 i2c-tools
+jq
 libinput-tools
 libopencv-dev
 libsqlite3-0
