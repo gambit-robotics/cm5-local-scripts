@@ -156,11 +156,118 @@ install_file 0644 "$REPO_DIR/lowpower/idle-dim.service.template" \
 
 # Local kiosk session. The image deliberately creates no login password; LightDM
 # autologin owns the physical touchscreen session.
+write_file 0644 "$ROOTFS/usr/local/share/gambit/kiosk-splash/index.html" <<'EOF'
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Starting Gambit</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #1a1d23;
+      color: #f5f7fb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 50% 35%, rgba(63, 96, 142, 0.24), transparent 34%),
+        #1a1d23;
+    }
+
+    main {
+      width: min(86vw, 560px);
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.4rem, 8vw, 4.2rem);
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 1.2rem 0 0;
+      color: #c6cedc;
+      font-size: clamp(1.15rem, 3vw, 1.55rem);
+      line-height: 1.45;
+    }
+
+    .bar {
+      position: relative;
+      overflow: hidden;
+      width: min(70vw, 380px);
+      height: 10px;
+      margin: 2.2rem auto 0;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .bar::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      width: 42%;
+      border-radius: inherit;
+      background: #7ea4ff;
+      animation: loading 1.35s ease-in-out infinite;
+    }
+
+    @keyframes loading {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(240%); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Starting Gambit</h1>
+    <p id="status">Starting local services...</p>
+    <div class="bar" aria-hidden="true"></div>
+  </main>
+  <script>
+    const target = new URLSearchParams(window.location.search).get("target") || "http://127.0.0.1:8765/kiosk/help";
+    const status = document.getElementById("status");
+    let attempts = 0;
+
+    async function checkReady() {
+      attempts += 1;
+      if (attempts > 10) {
+        status.textContent = "Still starting. This can take a few minutes after setup.";
+      }
+
+      try {
+        await fetch(target, { cache: "no-store", mode: "no-cors" });
+        window.location.replace(target);
+      } catch (_) {
+        window.setTimeout(checkReady, 2000);
+      }
+    }
+
+    window.setTimeout(checkReady, 800);
+  </script>
+</body>
+</html>
+EOF
+
 write_file 0755 "$ROOTFS/usr/local/bin/gambit-start-kiosk" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
 KIOSK_URL="${KIOSK_URL:-http://127.0.0.1:8765/kiosk/help}"
+SPLASH_PORT="${SPLASH_PORT:-8764}"
+SPLASH_DIR="${SPLASH_DIR:-/usr/local/share/gambit/kiosk-splash}"
 READY_LOG_INTERVAL="${READY_LOG_INTERVAL:-30}"
 
 echo "Waiting for Wayland display..."
@@ -171,19 +278,22 @@ for _ in $(seq 1 180); do
     sleep 1
 done
 
-waited=0
-while ! curl -fsS "$KIOSK_URL" >/dev/null 2>&1; do
-    sleep 2
-    waited=$((waited + 2))
-    if (( waited % READY_LOG_INTERVAL == 0 )); then
-        echo "Still waiting for web server at $KIOSK_URL (${waited}s)"
-    fi
-done
-echo "Web server ready after ${waited}s."
+if [[ -z "${XDG_RUNTIME_DIR:-}" || -z "${WAYLAND_DISPLAY:-}" || ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]]; then
+    echo "Error: Wayland display never appeared. Exiting."
+    exit 1
+fi
 
 pkill -u "$(whoami)" -f "chromium.*user-data-dir=/tmp/chromium-kiosk" 2>/dev/null || true
+pkill -u "$(whoami)" -f "python3 -m http.server $SPLASH_PORT" 2>/dev/null || true
 
-exec chromium \
+python3 -m http.server "$SPLASH_PORT" --bind 127.0.0.1 --directory "$SPLASH_DIR" >/tmp/gambit-kiosk-splash.log 2>&1 &
+SPLASH_PID=$!
+trap 'kill "$SPLASH_PID" 2>/dev/null || true' EXIT
+
+encoded_target="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$KIOSK_URL")"
+SPLASH_URL="http://127.0.0.1:${SPLASH_PORT}/?target=${encoded_target}"
+
+chromium \
     --ozone-platform=wayland \
     --touch-events=enabled \
     --password-store=basic \
@@ -200,7 +310,20 @@ exec chromium \
     --disable-renderer-backgrounding \
     --disable-backgrounding-occluded-windows \
     --disable-ipc-flooding-protection \
-    "$KIOSK_URL"
+    "$SPLASH_URL" &
+CHROMIUM_PID=$!
+
+waited=0
+while ! curl -fsS "$KIOSK_URL" >/dev/null 2>&1; do
+    sleep 2
+    waited=$((waited + 2))
+    if (( waited % READY_LOG_INTERVAL == 0 )); then
+        echo "Still waiting for web server at $KIOSK_URL (${waited}s)"
+    fi
+done
+echo "Web server ready after ${waited}s."
+
+wait "$CHROMIUM_PID"
 EOF
 
 write_file 0644 "$ROOTFS/usr/local/share/gambit/systemd/user/kiosk.service" <<'EOF'
@@ -290,20 +413,12 @@ chown "$KIOSK_USER:$KIOSK_USER" "$user_home/.config/labwc/environment"
 install -d -m 0755 /var/lib/systemd/linger
 touch "/var/lib/systemd/linger/$KIOSK_USER"
 
-session="gambit-labwc"
-if [[ ! -f /usr/share/wayland-sessions/gambit-labwc.desktop && -d /usr/share/wayland-sessions ]]; then
-    while IFS= read -r candidate; do
-        session="$(basename "$candidate" .desktop)"
-        break
-    done < <(find /usr/share/wayland-sessions -maxdepth 1 -type f -iname '*labwc*.desktop' | sort)
-fi
-
 install -d -m 0755 /etc/lightdm/lightdm.conf.d
 cat > /etc/lightdm/lightdm.conf.d/12-gambit-autologin.conf <<LIGHTDM
 [Seat:*]
 autologin-user=$KIOSK_USER
 autologin-user-timeout=0
-user-session=$session
+user-session=gambit-labwc
 LIGHTDM
 
 if [[ -f /etc/xdg/labwc/autostart ]] && [[ ! -f /etc/xdg/labwc/autostart.bak ]]; then
@@ -322,7 +437,7 @@ systemctl mask dev-dri-renderD128.device >/dev/null 2>&1 || true
 
 install -d -m 0755 "$(dirname "$MARKER")"
 printf 'configured_at=%s\nuser=%s\nsession=%s\nuid=%s\n' \
-    "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$KIOSK_USER" "$session" "$user_id" > "$MARKER"
+    "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$KIOSK_USER" "gambit-labwc" "$user_id" > "$MARKER"
 EOF
 
 write_file 0644 "$ROOTFS/etc/systemd/system/gambit-kiosk-local-user.service" <<'EOF'

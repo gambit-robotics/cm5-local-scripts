@@ -25,7 +25,7 @@ echo "Installing dependencies..."
 if [[ "${SKIP_APT_UPDATE:-}" != "1" ]]; then
     apt-get update -qq
 fi
-apt-get install -y -qq chromium curl wlrctl >/dev/null
+apt-get install -y -qq chromium curl python3 wlrctl >/dev/null
 
 # Step 2: Create invisible cursor theme for touchscreen kiosk
 echo "Creating invisible cursor theme..."
@@ -99,10 +99,118 @@ BGEOF
 
 # Step 4: Create start-kiosk.sh
 echo "Creating $KIOSK_SCRIPT..."
+SPLASH_DIR="$USER_HOME/kiosk-splash"
+install -d -o "$KIOSK_USER" -g "$KIOSK_USER" "$SPLASH_DIR"
+cat > "$SPLASH_DIR/index.html" <<'SPLASH_EOF'
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Starting Gambit</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #1a1d23;
+      color: #f5f7fb;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 50% 35%, rgba(63, 96, 142, 0.24), transparent 34%),
+        #1a1d23;
+    }
+
+    main {
+      width: min(86vw, 560px);
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.4rem, 8vw, 4.2rem);
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 1.2rem 0 0;
+      color: #c6cedc;
+      font-size: clamp(1.15rem, 3vw, 1.55rem);
+      line-height: 1.45;
+    }
+
+    .bar {
+      position: relative;
+      overflow: hidden;
+      width: min(70vw, 380px);
+      height: 10px;
+      margin: 2.2rem auto 0;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .bar::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      width: 42%;
+      border-radius: inherit;
+      background: #7ea4ff;
+      animation: loading 1.35s ease-in-out infinite;
+    }
+
+    @keyframes loading {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(240%); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Starting Gambit</h1>
+    <p id="status">Starting local services...</p>
+    <div class="bar" aria-hidden="true"></div>
+  </main>
+  <script>
+    const target = new URLSearchParams(window.location.search).get("target") || "http://127.0.0.1:8765/kiosk/help";
+    const status = document.getElementById("status");
+    let attempts = 0;
+
+    async function checkReady() {
+      attempts += 1;
+      if (attempts > 10) {
+        status.textContent = "Still starting. This can take a few minutes after setup.";
+      }
+
+      try {
+        await fetch(target, { cache: "no-store", mode: "no-cors" });
+        window.location.replace(target);
+      } catch (_) {
+        window.setTimeout(checkReady, 2000);
+      }
+    }
+
+    window.setTimeout(checkReady, 800);
+  </script>
+</body>
+</html>
+SPLASH_EOF
+chown "$KIOSK_USER:$KIOSK_USER" "$SPLASH_DIR/index.html"
+
 cat > "$KIOSK_SCRIPT" << 'KIOSK_EOF'
 #!/bin/bash
 
 KIOSK_URL="http://127.0.0.1:8765/kiosk/help"
+SPLASH_PORT="${SPLASH_PORT:-8764}"
+SPLASH_DIR="${SPLASH_DIR:-$HOME/kiosk-splash}"
 READY_LOG_INTERVAL=30
 
 echo "Waiting for Wayland display (max 180s)..."
@@ -119,20 +227,17 @@ if [[ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]]; then
     exit 1
 fi
 
-# Wait for web server (splash wallpaper stays visible during this wait)
-echo "Waiting for web server on $KIOSK_URL..."
-waited=0
-while ! curl -fsS "$KIOSK_URL" >/dev/null 2>&1; do
-    sleep 2
-    waited=$((waited + 2))
-    if (( waited % READY_LOG_INTERVAL == 0 )); then
-        echo "Still waiting for web server at $KIOSK_URL (${waited}s)"
-    fi
-done
-echo "Web server ready after ${waited}s."
-
 # Kill any existing kiosk chromium (only for this user)
 pkill -u "$(whoami)" -f "chromium.*user-data-dir=/tmp/chromium-kiosk" 2>/dev/null || true
+pkill -u "$(whoami)" -f "python3 -m http.server $SPLASH_PORT" 2>/dev/null || true
+
+python3 -m http.server "$SPLASH_PORT" --bind 127.0.0.1 --directory "$SPLASH_DIR" >/tmp/gambit-kiosk-splash.log 2>&1 &
+SPLASH_PID=$!
+trap 'kill "$SPLASH_PID" 2>/dev/null || true' EXIT
+
+encoded_target="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$KIOSK_URL")"
+SPLASH_URL="http://127.0.0.1:${SPLASH_PORT}/?target=${encoded_target}"
+
 sleep 1
 
 echo "Launching Chromium kiosk on Wayland..."
@@ -153,8 +258,19 @@ chromium \
     --disable-renderer-backgrounding \
     --disable-backgrounding-occluded-windows \
     --disable-ipc-flooding-protection \
-    "$KIOSK_URL" &
+    "$SPLASH_URL" &
 CHROMIUM_PID=$!
+
+echo "Waiting for web server on $KIOSK_URL..."
+waited=0
+while ! curl -fsS "$KIOSK_URL" >/dev/null 2>&1; do
+    sleep 2
+    waited=$((waited + 2))
+    if (( waited % READY_LOG_INTERVAL == 0 )); then
+        echo "Still waiting for web server at $KIOSK_URL (${waited}s)"
+    fi
+done
+echo "Web server ready after ${waited}s."
 
 # Block on Chromium so systemd tracks exit status for Restart=on-failure
 wait $CHROMIUM_PID

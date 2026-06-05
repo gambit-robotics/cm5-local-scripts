@@ -14,11 +14,23 @@ make_rootfs() {
         "$dir/etc/xdg/labwc" \
         "$dir/usr/include/python3.13" \
         "$dir/usr/local/bin" \
+        "$dir/usr/local/share/gambit/kiosk-splash" \
         "$dir/usr/local/sbin" \
         "$dir/usr/share/wayland-sessions" \
         "$dir/var/lib/gambit"
     touch "$dir/usr/include/python3.13/Python.h"
     echo i2c-dev > "$dir/etc/modules-load.d/gambit-i2c.conf"
+    cat > "$dir/usr/local/share/gambit/kiosk-splash/index.html" <<'EOF'
+<!doctype html>
+<title>Starting Gambit</title>
+EOF
+    cat > "$dir/usr/local/bin/gambit-start-kiosk" <<'EOF'
+#!/usr/bin/env bash
+SPLASH_PORT="${SPLASH_PORT:-8764}"
+python3 -m http.server "$SPLASH_PORT"
+SPLASH_URL="http://127.0.0.1:${SPLASH_PORT}/"
+EOF
+    chmod 0755 "$dir/usr/local/bin/gambit-start-kiosk"
     cat > "$dir/usr/local/sbin/gambit-setup-local-kiosk-user" <<'EOF'
 #!/usr/bin/env bash
 KIOSK_USER="${GAMBIT_KIOSK_USER:-gambitadmin}"
@@ -104,6 +116,14 @@ make_rootfs "$missing_i2c_dev_root"
 rm -f "$missing_i2c_dev_root/etc/modules-load.d/gambit-i2c.conf"
 if "$VERIFY" --rootfs "$missing_i2c_dev_root" >/dev/null 2>&1; then
     echo "expected missing i2c-dev modules-load fixture to fail" >&2
+    exit 1
+fi
+
+missing_kiosk_splash_root="$tmp/missing-kiosk-splash"
+make_rootfs "$missing_kiosk_splash_root"
+rm -f "$missing_kiosk_splash_root/usr/local/share/gambit/kiosk-splash/index.html"
+if "$VERIFY" --rootfs "$missing_kiosk_splash_root" >/dev/null 2>&1; then
+    echo "expected missing local kiosk splash fixture to fail" >&2
     exit 1
 fi
 

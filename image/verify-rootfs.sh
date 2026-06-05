@@ -56,6 +56,23 @@ if [[ ! -f "$ROOTFS/etc/modules-load.d/gambit-i2c.conf" ]] || ! grep -Eq '^[[:sp
     fail "missing i2c-dev modules-load config for /dev/i2c-* adapters"
 fi
 
+kiosk_splash="$ROOTFS/usr/local/share/gambit/kiosk-splash/index.html"
+if [[ ! -f "$kiosk_splash" ]] || ! grep -Eq 'Starting Gambit' "$kiosk_splash"; then
+    fail "missing local kiosk startup splash page"
+fi
+
+kiosk_launcher="$ROOTFS/usr/local/bin/gambit-start-kiosk"
+if [[ ! -x "$kiosk_launcher" ]]; then
+    fail "missing executable kiosk launcher"
+else
+    if ! grep -Eq 'python3 -m http\.server "\$SPLASH_PORT"' "$kiosk_launcher"; then
+        fail "kiosk launcher does not start local splash server"
+    fi
+    if ! grep -Eq 'SPLASH_URL=' "$kiosk_launcher"; then
+        fail "kiosk launcher does not open splash before local app is ready"
+    fi
+fi
+
 kiosk_setup="$ROOTFS/usr/local/sbin/gambit-setup-local-kiosk-user"
 if [[ ! -x "$kiosk_setup" ]]; then
     fail "missing executable local kiosk user setup script"
