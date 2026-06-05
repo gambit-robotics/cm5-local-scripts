@@ -100,6 +100,7 @@ write_file 0644 "$ROOTFS/etc/modules-load.d/gambit-i2c.conf" <<'EOF'
 i2c-dev
 EOF
 mask_system_unit userconfig.service
+mask_system_unit dev-dri-renderD128.device
 
 # Raspberry Pi's chromium package may install a Google API key env file. The
 # Gambit image should not bake third-party API keys, even package defaults.
@@ -153,6 +154,22 @@ install_file 0755 "$REPO_DIR/lowpower/gambit-input-idle.sh" \
     "$ROOTFS/usr/local/bin/gambit-input-idle"
 install_file 0644 "$REPO_DIR/lowpower/idle-dim.service.template" \
     "$ROOTFS/usr/local/share/gambit/systemd/user/gambit-idle-dim.service.template"
+write_file 0644 "$ROOTFS/etc/systemd/system/gambit-default-brightness.service" <<'EOF'
+[Unit]
+Description=Gambit: set default display brightness
+DefaultDependencies=no
+After=local-fs.target
+Before=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'brightnessctl --quiet set 25%% || true'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+enable_system_unit gambit-default-brightness.service
 
 # Local kiosk session. The image deliberately creates no login password; LightDM
 # autologin owns the physical touchscreen session.

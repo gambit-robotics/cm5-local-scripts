@@ -76,6 +76,20 @@ else
     fi
 fi
 
+dim_script="$ROOTFS/usr/local/bin/gambit-dim"
+if [[ ! -x "$dim_script" ]] || ! grep -Fq 'FULL_LEVEL="${FULL_LEVEL:-25%}"' "$dim_script"; then
+    fail "missing normal screen brightness default of 25%"
+fi
+
+default_brightness_service="$ROOTFS/etc/systemd/system/gambit-default-brightness.service"
+if [[ ! -f "$default_brightness_service" ]] || ! grep -Fq 'brightnessctl --quiet set 25%%' "$default_brightness_service"; then
+    fail "missing default brightness service at 25%"
+fi
+
+if [[ ! -L "$ROOTFS/etc/systemd/system/multi-user.target.wants/gambit-default-brightness.service" ]]; then
+    fail "gambit-default-brightness.service is not enabled"
+fi
+
 kiosk_setup="$ROOTFS/usr/local/sbin/gambit-setup-local-kiosk-user"
 if [[ ! -x "$kiosk_setup" ]]; then
     fail "missing executable local kiosk user setup script"
@@ -93,6 +107,10 @@ fi
 
 if [[ ! -L "$ROOTFS/etc/systemd/system/userconfig.service" ]] || [[ "$(readlink "$ROOTFS/etc/systemd/system/userconfig.service")" != "/dev/null" ]]; then
     fail "userconfig.service is not masked; first-user wizard can block kiosk boot"
+fi
+
+if [[ ! -L "$ROOTFS/etc/systemd/system/dev-dri-renderD128.device" ]] || [[ "$(readlink "$ROOTFS/etc/systemd/system/dev-dri-renderD128.device")" != "/dev/null" ]]; then
+    fail "dev-dri-renderD128.device is not masked; LightDM can wait for a missing render node"
 fi
 
 if [[ ! -L "$ROOTFS/etc/systemd/system/multi-user.target.wants/gambit-kiosk-local-user.service" ]]; then

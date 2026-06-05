@@ -11,10 +11,10 @@ set -euo pipefail
 #
 # Usage:
 #   dim.sh dim         # set backlight to DIM_LEVEL (default 15%)
-#   dim.sh restore     # set backlight to FULL_LEVEL (default 100%)
+#   dim.sh restore     # set backlight to FULL_LEVEL (default 25%)
 
 DIM_LEVEL="${DIM_LEVEL:-15%}"
-FULL_LEVEL="${FULL_LEVEL:-100%}"
+FULL_LEVEL="${FULL_LEVEL:-25%}"
 
 mode="${1:-restore}"
 case "$mode" in

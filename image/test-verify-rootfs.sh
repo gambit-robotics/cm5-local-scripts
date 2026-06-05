@@ -32,6 +32,22 @@ SPLASH_URL="http://127.0.0.1:${SPLASH_PORT}/"
 WEB_FAILURE_LIMIT="${WEB_FAILURE_LIMIT:-3}"
 EOF
     chmod 0755 "$dir/usr/local/bin/gambit-start-kiosk"
+    cat > "$dir/usr/local/bin/gambit-dim" <<'EOF'
+#!/usr/bin/env bash
+FULL_LEVEL="${FULL_LEVEL:-25%}"
+EOF
+    chmod 0755 "$dir/usr/local/bin/gambit-dim"
+    cat > "$dir/etc/systemd/system/gambit-default-brightness.service" <<'EOF'
+[Unit]
+Description=Gambit: set default display brightness
+
+[Service]
+ExecStart=/bin/sh -c 'brightnessctl --quiet set 25%%'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    ln -sfn ../gambit-default-brightness.service "$dir/etc/systemd/system/multi-user.target.wants/gambit-default-brightness.service"
     cat > "$dir/usr/local/sbin/gambit-setup-local-kiosk-user" <<'EOF'
 #!/usr/bin/env bash
 KIOSK_USER="${GAMBIT_KIOSK_USER:-gambitadmin}"
@@ -42,6 +58,7 @@ EOF
     touch "$dir/etc/systemd/system/gambit-kiosk-local-user.service"
     ln -sfn ../gambit-kiosk-local-user.service "$dir/etc/systemd/system/multi-user.target.wants/gambit-kiosk-local-user.service"
     ln -sfn /dev/null "$dir/etc/systemd/system/userconfig.service"
+    ln -sfn /dev/null "$dir/etc/systemd/system/dev-dri-renderD128.device"
     cat > "$dir/usr/share/wayland-sessions/gambit-labwc.desktop" <<'EOF'
 [Desktop Entry]
 Name=Gambit Labwc
@@ -141,6 +158,14 @@ make_rootfs "$missing_userconfig_mask_root"
 rm -f "$missing_userconfig_mask_root/etc/systemd/system/userconfig.service"
 if "$VERIFY" --rootfs "$missing_userconfig_mask_root" >/dev/null 2>&1; then
     echo "expected missing userconfig mask fixture to fail" >&2
+    exit 1
+fi
+
+missing_render_mask_root="$tmp/missing-render-mask"
+make_rootfs "$missing_render_mask_root"
+rm -f "$missing_render_mask_root/etc/systemd/system/dev-dri-renderD128.device"
+if "$VERIFY" --rootfs "$missing_render_mask_root" >/dev/null 2>&1; then
+    echo "expected missing render device mask fixture to fail" >&2
     exit 1
 fi
 
