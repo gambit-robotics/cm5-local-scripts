@@ -29,7 +29,7 @@ help:
 	@echo "  USER=<username>      Override target user (default: auto-detect)"
 	@echo ""
 	@echo "Image tooling:"
-	@echo "  make image-apply ROOTFS=/mnt/root BOOTFS=/mnt/boot IMAGE_VERSION=0.1.0-dev"
+	@echo "  make image-apply ROOTFS=/mnt/root BOOTFS=/mnt/boot IMAGE_VERSION=0.1.0-dev VIAM_DEFAULTS=image/viam-defaults.user-testing.json"
 	@echo "  make image-verify ROOTFS=/mnt/root"
 	@echo "  make image-test"
 	@echo "  make image-publish-r2 RELEASE=2026-06-03-assembler-rc1 ARTIFACT=dist/gambit.img.xz"
@@ -128,7 +128,10 @@ endif
 ifeq ($(IMAGE_VERSION),)
 	$(error IMAGE_VERSION is required)
 endif
-	sudo image/apply-rootfs.sh --rootfs "$(ROOTFS)" --bootfs "$(BOOTFS)" --image-version "$(IMAGE_VERSION)" $(if $(VIAM_DEFAULTS),--viam-defaults "$(VIAM_DEFAULTS)",)
+ifeq ($(VIAM_DEFAULTS),)
+	$(error VIAM_DEFAULTS is required)
+endif
+	sudo image/apply-rootfs.sh --rootfs "$(ROOTFS)" --bootfs "$(BOOTFS)" --image-version "$(IMAGE_VERSION)" --viam-defaults "$(VIAM_DEFAULTS)"
 
 image-verify:
 ifeq ($(ROOTFS),)
@@ -146,4 +149,4 @@ endif
 ifeq ($(ARTIFACT),)
 	$(error ARTIFACT is required)
 endif
-	image/publish-r2.sh --release "$(RELEASE)" --artifact "$(ARTIFACT)" $(if $(ROOTFS),--rootfs "$(ROOTFS)",) $(if $(R2_BUCKET),--bucket "$(R2_BUCKET)",) $(if $(R2_PREFIX),--prefix "$(R2_PREFIX)",) $(if $(R2_ENDPOINT_URL),--endpoint-url "$(R2_ENDPOINT_URL)",) $(if $(PRINT_URLS),--print-urls,) $(if $(DRY_RUN),--dry-run,)
+	image/publish-r2.sh --release "$(RELEASE)" --artifact "$(ARTIFACT)" $(if $(ROOTFS),--rootfs "$(ROOTFS)",) $(if $(R2_BUCKET),--bucket "$(R2_BUCKET)",) $(if $(R2_PREFIX),--prefix "$(R2_PREFIX)",) $(if $(R2_ENDPOINT_URL),--endpoint-url "$(R2_ENDPOINT_URL)",) $(if $(PRINT_URLS),--print-urls,) $(if $(ALLOW_UNVERIFIED_ROOTFS),--allow-unverified-rootfs,) $(if $(DRY_RUN),--dry-run,)

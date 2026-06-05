@@ -18,12 +18,14 @@ Options:
   --rootfs PATH          Mounted root filesystem for the image.
   --bootfs PATH          Mounted boot firmware filesystem for the image.
   --image-version VALUE  Image version to write to /etc/gambit/image-build.json.
-  --viam-defaults PATH   Optional viam-defaults.json to bake into /etc.
+  --viam-defaults PATH   viam-defaults.json to bake into /etc for BLE provisioning.
   --target-user NAME     User service template owner/name hint (default: gambitadmin).
   --help                 Show this help.
 
 This script writes runtime artifacts into a mounted Raspberry Pi OS rootfs. It
 does not mount images, install apt packages, or bake any per-device secret.
+The image must include Viam provisioning defaults, but must not include
+per-device /etc/viam.json cloud credentials.
 EOF
 }
 
@@ -48,9 +50,8 @@ done
 [[ -d "$BOOTFS" ]] || die "bootfs does not exist: $BOOTFS"
 [[ -f "$ROOTFS/etc/os-release" ]] || die "rootfs does not look mounted: missing $ROOTFS/etc/os-release"
 [[ -n "$TARGET_USER" ]] || die "--target-user must be non-empty"
-if [[ -n "$VIAM_DEFAULTS" && ! -f "$VIAM_DEFAULTS" ]]; then
-    die "--viam-defaults file not found: $VIAM_DEFAULTS"
-fi
+[[ -n "$VIAM_DEFAULTS" ]] || die "--viam-defaults is required for a provisionable image"
+[[ -f "$VIAM_DEFAULTS" ]] || die "--viam-defaults file not found: $VIAM_DEFAULTS"
 
 install_file() {
     local mode="$1"
@@ -74,6 +75,12 @@ enable_system_unit() {
     ln -sfn "../$unit" "$ROOTFS/etc/systemd/system/multi-user.target.wants/$unit"
 }
 
+mask_system_unit() {
+    local unit="$1"
+    install -d -m 0755 "$ROOTFS/etc/systemd/system"
+    ln -sfn /dev/null "$ROOTFS/etc/systemd/system/$unit"
+}
+
 cm5_ref="$(git -C "$REPO_DIR" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
 applied_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
@@ -88,6 +95,11 @@ install_file 0644 "$REPO_DIR/config/config.txt" "$BOOTFS/config.txt"
 install_file 0644 "$REPO_DIR/config/asound.conf" "$ROOTFS/etc/asound.conf"
 install_file 0644 "$REPO_DIR/config/logind-power-button.conf" \
     "$ROOTFS/etc/systemd/logind.conf.d/50-gambit-power-button.conf"
+write_file 0644 "$ROOTFS/etc/modules-load.d/gambit-i2c.conf" <<'EOF'
+# Expose /dev/i2c-* adapters for Viam modules and local button/sensor tooling.
+i2c-dev
+EOF
+mask_system_unit userconfig.service
 
 # Raspberry Pi's chromium package may install a Google API key env file. The
 # Gambit image should not bake third-party API keys, even package defaults.
@@ -142,8 +154,8 @@ install_file 0755 "$REPO_DIR/lowpower/gambit-input-idle.sh" \
 install_file 0644 "$REPO_DIR/lowpower/idle-dim.service.template" \
     "$ROOTFS/usr/local/share/gambit/systemd/user/gambit-idle-dim.service.template"
 
-# User-service runtime artifacts. The bootstrap module should enable these for
-# the actual provisioned user once local account policy is finalized.
+# Local kiosk session. The image deliberately creates no login password; LightDM
+# autologin owns the physical touchscreen session.
 write_file 0755 "$ROOTFS/usr/local/bin/gambit-start-kiosk" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -207,6 +219,128 @@ StandardError=journal
 [Install]
 WantedBy=default.target
 EOF
+
+write_file 0644 "$ROOTFS/usr/share/wayland-sessions/gambit-labwc.desktop" <<'EOF'
+[Desktop Entry]
+Name=Gambit Labwc
+Comment=Gambit kiosk Wayland session
+Exec=labwc
+Type=Application
+DesktopNames=labwc
+EOF
+
+write_file 0644 "$ROOTFS/etc/xdg/labwc/autostart" <<'EOF'
+swaybg -c '#1a1d23' &
+/usr/bin/kanshi &
+/bin/sh -c 'sleep 2; wlr-randr --output DSI-2 --transform 180' &
+EOF
+
+write_file 0755 "$ROOTFS/usr/local/sbin/gambit-setup-local-kiosk-user" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+KIOSK_USER="${GAMBIT_KIOSK_USER:-gambitadmin}"
+MARKER="/var/lib/gambit/bootstrap/kiosk-local-user.done"
+
+if [[ -f "$MARKER" ]]; then
+    exit 0
+fi
+
+existing_groups=()
+for group in adm dialout cdrom sudo audio video plugdev users input render netdev gpio i2c spi; do
+    if getent group "$group" >/dev/null; then
+        existing_groups+=("$group")
+    fi
+done
+
+if ! id "$KIOSK_USER" >/dev/null 2>&1; then
+    args=(-m -s /bin/bash)
+    if (( ${#existing_groups[@]} > 0 )); then
+        IFS=,
+        args+=(-G "${existing_groups[*]}")
+        unset IFS
+    fi
+    useradd "${args[@]}" "$KIOSK_USER"
+else
+    for group in "${existing_groups[@]}"; do
+        usermod -aG "$group" "$KIOSK_USER" || true
+    done
+fi
+
+# Keep the image free of baked login secrets. Autologin owns the kiosk session.
+passwd -l "$KIOSK_USER" >/dev/null 2>&1 || true
+
+user_home="$(getent passwd "$KIOSK_USER" | cut -d: -f6)"
+user_id="$(id -u "$KIOSK_USER")"
+
+install -d -o "$KIOSK_USER" -g "$KIOSK_USER" "$user_home/.config/systemd/user/default.target.wants"
+install -d -o "$KIOSK_USER" -g "$KIOSK_USER" "$user_home/.config/labwc"
+install -m 0644 -o "$KIOSK_USER" -g "$KIOSK_USER" \
+    /usr/local/share/gambit/systemd/user/kiosk.service \
+    "$user_home/.config/systemd/user/kiosk.service"
+ln -sfn ../kiosk.service "$user_home/.config/systemd/user/default.target.wants/kiosk.service"
+chown -h "$KIOSK_USER:$KIOSK_USER" "$user_home/.config/systemd/user/default.target.wants/kiosk.service"
+
+cat > "$user_home/.config/labwc/environment" <<'LABWC_ENV'
+XCURSOR_THEME=invisible-cursor
+XCURSOR_SIZE=1
+LABWC_ENV
+chown "$KIOSK_USER:$KIOSK_USER" "$user_home/.config/labwc/environment"
+
+install -d -m 0755 /var/lib/systemd/linger
+touch "/var/lib/systemd/linger/$KIOSK_USER"
+
+session="gambit-labwc"
+if [[ ! -f /usr/share/wayland-sessions/gambit-labwc.desktop && -d /usr/share/wayland-sessions ]]; then
+    while IFS= read -r candidate; do
+        session="$(basename "$candidate" .desktop)"
+        break
+    done < <(find /usr/share/wayland-sessions -maxdepth 1 -type f -iname '*labwc*.desktop' | sort)
+fi
+
+install -d -m 0755 /etc/lightdm/lightdm.conf.d
+cat > /etc/lightdm/lightdm.conf.d/12-gambit-autologin.conf <<LIGHTDM
+[Seat:*]
+autologin-user=$KIOSK_USER
+autologin-user-timeout=0
+user-session=$session
+LIGHTDM
+
+if [[ -f /etc/xdg/labwc/autostart ]] && [[ ! -f /etc/xdg/labwc/autostart.bak ]]; then
+    cp /etc/xdg/labwc/autostart /etc/xdg/labwc/autostart.bak
+fi
+install -d -m 0755 /etc/xdg/labwc
+cat > /etc/xdg/labwc/autostart <<'AUTOSTART'
+swaybg -c '#1a1d23' &
+/usr/bin/kanshi &
+/bin/sh -c 'sleep 2; wlr-randr --output DSI-2 --transform 180' &
+AUTOSTART
+
+systemctl disable userconfig.service >/dev/null 2>&1 || true
+systemctl mask userconfig.service >/dev/null 2>&1 || true
+systemctl mask dev-dri-renderD128.device >/dev/null 2>&1 || true
+
+install -d -m 0755 "$(dirname "$MARKER")"
+printf 'configured_at=%s\nuser=%s\nsession=%s\nuid=%s\n' \
+    "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$KIOSK_USER" "$session" "$user_id" > "$MARKER"
+EOF
+
+write_file 0644 "$ROOTFS/etc/systemd/system/gambit-kiosk-local-user.service" <<'EOF'
+[Unit]
+Description=Gambit first-boot local kiosk user setup
+DefaultDependencies=no
+After=local-fs.target
+Before=display-manager.service lightdm.service
+ConditionPathExists=!/var/lib/gambit/bootstrap/kiosk-local-user.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gambit-setup-local-kiosk-user
+
+[Install]
+WantedBy=multi-user.target
+EOF
+enable_system_unit gambit-kiosk-local-user.service
 
 write_file 0755 "$ROOTFS/usr/local/bin/gambit-button-controller" <<'EOF'
 #!/usr/bin/env python3
@@ -322,9 +456,7 @@ awk '/^# Plymouth theme script/{flag=1} flag{print}' "$REPO_DIR/plymouth/setup-b
     | sed '/^EOF$/,$d' > "$plymouth_dir/gambit.script"
 chmod 0644 "$plymouth_dir/gambit.script"
 
-if [[ -n "$VIAM_DEFAULTS" ]]; then
-    install_file 0644 "$VIAM_DEFAULTS" "$ROOTFS/etc/viam-defaults.json"
-fi
+install_file 0644 "$VIAM_DEFAULTS" "$ROOTFS/etc/viam-defaults.json"
 
 write_file 0644 "$ROOTFS/etc/gambit/image-build.json" <<EOF
 {

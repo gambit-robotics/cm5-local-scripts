@@ -14,6 +14,7 @@ EXPIRES_IN="${R2_SIGNED_URL_EXPIRES_IN:-604800}"
 PRINT_URLS=0
 DRY_RUN=0
 KEEP_STAGE=0
+ALLOW_UNVERIFIED_ROOTFS=0
 STAGE_DIR=""
 
 usage() {
@@ -31,6 +32,8 @@ Options:
   --print-urls            Print presigned download URLs after upload.
   --stage-dir PATH        Keep staged release files in PATH instead of a temp dir.
   --keep-stage            Keep temp staging directory after script exits.
+  --allow-unverified-rootfs
+                          Stage/upload without mounted-rootfs verification.
   --dry-run               Stage and print planned uploads without calling R2.
   --help                  Show this help.
 
@@ -77,6 +80,7 @@ while [[ $# -gt 0 ]]; do
         --print-urls) PRINT_URLS=1; shift ;;
         --stage-dir) STAGE_DIR="${2:-}"; KEEP_STAGE=1; shift 2 ;;
         --keep-stage) KEEP_STAGE=1; shift ;;
+        --allow-unverified-rootfs) ALLOW_UNVERIFIED_ROOTFS=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         --help|-h) usage; exit 0 ;;
         *) die "unknown argument: $1" ;;
@@ -96,6 +100,8 @@ artifact_name="$(basename "$ARTIFACT")"
 
 if [[ -n "$ROOTFS" ]]; then
     "$SCRIPT_DIR/verify-rootfs.sh" --rootfs "$ROOTFS"
+elif [[ "$ALLOW_UNVERIFIED_ROOTFS" -eq 0 ]]; then
+    die "--rootfs is required unless --allow-unverified-rootfs is set"
 fi
 
 if [[ -z "$ENDPOINT_URL" && -n "${R2_ACCOUNT_ID:-}" ]]; then
@@ -173,7 +179,7 @@ EOF
     if [[ -n "$ROOTFS" ]]; then
         echo "rootfs_verification=passed"
     else
-        echo "rootfs_verification=not_run_by_publish_script"
+        echo "rootfs_verification=explicitly_skipped"
     fi
 } > "$verification_path"
 

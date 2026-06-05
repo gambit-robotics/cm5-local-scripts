@@ -21,13 +21,21 @@ sudo image/apply-rootfs.sh \
   --rootfs /mnt/gambit-root \
   --bootfs /mnt/gambit-boot \
   --image-version 0.1.0-dev \
-  --viam-defaults /path/to/viam-defaults.json
+  --viam-defaults image/viam-defaults.user-testing.json
 ```
 
 Run the verifier directly against a mounted rootfs:
 
 ```bash
 image/verify-rootfs.sh --rootfs /mnt/gambit-root
+```
+
+For a one-off assembled device that was flashed before these image steps were
+baked in, copy and run the idempotent setup script on the Pi:
+
+```bash
+sudo image/setup-assembled-device.sh
+sudo reboot
 ```
 
 Publish a tested image artifact to the private R2 bucket:
@@ -54,13 +62,17 @@ should use short-lived signed URLs.
 - `/boot/firmware/config.txt` from `config/config.txt`
 - `/etc/asound.conf`
 - logind power-button drop-in
+- `i2c-dev` boot module load config so `/dev/i2c-*` adapters are available
+- LightDM/labwc kiosk session setup for `gambitadmin`, with Raspberry Pi
+  first-user setup masked and DSI-2 rotated 180 degrees
 - `/run/gambit` tmpfiles config
 - boot chime asset and systemd unit
 - CPU governor unit
 - kiosk, buttons, and idle-dim runtime scripts/templates under `/usr/local` and
   `/usr/local/share/gambit`
 - Plymouth assets/theme files
-- optional `/etc/viam-defaults.json`
+- `/etc/viam-defaults.json` for Viam BLE provisioning in the User Testing
+  location; the image must not contain per-device `/etc/viam.json`
 - image metadata at `/etc/gambit/image-build.json`
 
 ## R2 Release Contents
@@ -77,8 +89,11 @@ Package dependencies are listed in `packages.txt`. Install them during the
 image build stage before running `apply-rootfs.sh`; avoid first-boot apt
 transactions except for tiny repair work owned by the future bootstrap module.
 The package set includes OpenCV/GoCV system dependencies (`libopencv-dev`,
-`pkg-config`, and build tooling) plus SQLite runtime and headers (`sqlite3`,
-`libsqlite3-0`, and `libsqlite3-dev`).
+`pkg-config`, and build tooling), Python build headers/venv support
+(`python3-dev`, `python3-venv`) for Viam Python modules that compile native
+wheels, the local kiosk display stack (`lightdm`, `labwc`, `kanshi`,
+`wlr-randr`), plus SQLite runtime and headers (`sqlite3`, `libsqlite3-0`, and
+`libsqlite3-dev`).
 
 ## Not Yet Done
 

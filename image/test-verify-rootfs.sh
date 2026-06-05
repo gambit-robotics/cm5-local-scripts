@@ -9,10 +9,52 @@ trap 'rm -rf "$tmp"' EXIT
 
 make_rootfs() {
     local dir="$1"
-    mkdir -p "$dir/etc" "$dir/usr/local/bin" "$dir/var/lib/gambit"
+    mkdir -p "$dir/etc/modules-load.d" \
+        "$dir/etc/systemd/system/multi-user.target.wants" \
+        "$dir/etc/xdg/labwc" \
+        "$dir/usr/include/python3.13" \
+        "$dir/usr/local/bin" \
+        "$dir/usr/local/sbin" \
+        "$dir/usr/share/wayland-sessions" \
+        "$dir/var/lib/gambit"
+    touch "$dir/usr/include/python3.13/Python.h"
+    echo i2c-dev > "$dir/etc/modules-load.d/gambit-i2c.conf"
+    cat > "$dir/usr/local/sbin/gambit-setup-local-kiosk-user" <<'EOF'
+#!/usr/bin/env bash
+KIOSK_USER="${GAMBIT_KIOSK_USER:-gambitadmin}"
+echo "user-session=gambit-labwc"
+systemctl mask userconfig.service
+EOF
+    chmod 0755 "$dir/usr/local/sbin/gambit-setup-local-kiosk-user"
+    touch "$dir/etc/systemd/system/gambit-kiosk-local-user.service"
+    ln -sfn ../gambit-kiosk-local-user.service "$dir/etc/systemd/system/multi-user.target.wants/gambit-kiosk-local-user.service"
+    ln -sfn /dev/null "$dir/etc/systemd/system/userconfig.service"
+    cat > "$dir/usr/share/wayland-sessions/gambit-labwc.desktop" <<'EOF'
+[Desktop Entry]
+Name=Gambit Labwc
+Exec=labwc
+Type=Application
+EOF
+    cat > "$dir/etc/xdg/labwc/autostart" <<'EOF'
+swaybg -c '#1a1d23' &
+/usr/bin/kanshi &
+/bin/sh -c 'sleep 2; wlr-randr --output DSI-2 --transform 180' &
+EOF
     cat > "$dir/etc/shadow" <<'EOF'
 root:!:19876:0:99999:7:::
 daemon:*:19876:0:99999:7:::
+EOF
+    cat > "$dir/etc/viam-defaults.json" <<'EOF'
+{
+  "network_configuration": {
+    "manufacturer": "Gambit Robotics",
+    "model": "CM5",
+    "fragment_id": "f55bd1ed-142c-4232-9ac1-18eba4f99c87",
+    "hotspot_interface": "wlan0",
+    "hotspot_prefix": "gambit-setup",
+    "hotspot_password": "gambitsetup"
+  }
+}
 EOF
 }
 
@@ -39,23 +81,89 @@ if "$VERIFY" --rootfs "$key_root" >/dev/null 2>&1; then
     exit 1
 fi
 
-viam_root="$tmp/viam"
+viam_root="$tmp/viam-json"
 make_rootfs "$viam_root"
 cat > "$viam_root/etc/viam.json" <<'EOF'
-{"cloud":{"secret":"fleet-secret"}}
+{"cloud":{"id":"device-id"}}
 EOF
 if "$VERIFY" --rootfs "$viam_root" >/dev/null 2>&1; then
-    echo "expected viam secret fixture to fail" >&2
+    echo "expected baked viam.json fixture to fail" >&2
     exit 1
 fi
 
-viam_defaults_root="$tmp/viam-defaults"
+missing_python_dev_root="$tmp/missing-python-dev"
+make_rootfs "$missing_python_dev_root"
+rm -rf "$missing_python_dev_root/usr/include/python3.13"
+if "$VERIFY" --rootfs "$missing_python_dev_root" >/dev/null 2>&1; then
+    echo "expected missing Python.h fixture to fail" >&2
+    exit 1
+fi
+
+missing_i2c_dev_root="$tmp/missing-i2c-dev"
+make_rootfs "$missing_i2c_dev_root"
+rm -f "$missing_i2c_dev_root/etc/modules-load.d/gambit-i2c.conf"
+if "$VERIFY" --rootfs "$missing_i2c_dev_root" >/dev/null 2>&1; then
+    echo "expected missing i2c-dev modules-load fixture to fail" >&2
+    exit 1
+fi
+
+missing_kiosk_setup_root="$tmp/missing-kiosk-setup"
+make_rootfs "$missing_kiosk_setup_root"
+rm -f "$missing_kiosk_setup_root/usr/local/sbin/gambit-setup-local-kiosk-user"
+if "$VERIFY" --rootfs "$missing_kiosk_setup_root" >/dev/null 2>&1; then
+    echo "expected missing local kiosk setup fixture to fail" >&2
+    exit 1
+fi
+
+missing_userconfig_mask_root="$tmp/missing-userconfig-mask"
+make_rootfs "$missing_userconfig_mask_root"
+rm -f "$missing_userconfig_mask_root/etc/systemd/system/userconfig.service"
+if "$VERIFY" --rootfs "$missing_userconfig_mask_root" >/dev/null 2>&1; then
+    echo "expected missing userconfig mask fixture to fail" >&2
+    exit 1
+fi
+
+missing_wayland_root="$tmp/missing-wayland-session"
+make_rootfs "$missing_wayland_root"
+rm -f "$missing_wayland_root/usr/share/wayland-sessions/gambit-labwc.desktop"
+if "$VERIFY" --rootfs "$missing_wayland_root" >/dev/null 2>&1; then
+    echo "expected missing gambit-labwc session fixture to fail" >&2
+    exit 1
+fi
+
+missing_rotation_root="$tmp/missing-rotation"
+make_rootfs "$missing_rotation_root"
+sed -i.bak '/wlr-randr/d' "$missing_rotation_root/etc/xdg/labwc/autostart"
+rm -f "$missing_rotation_root/etc/xdg/labwc/autostart.bak"
+if "$VERIFY" --rootfs "$missing_rotation_root" >/dev/null 2>&1; then
+    echo "expected missing DSI-2 transform fixture to fail" >&2
+    exit 1
+fi
+
+missing_defaults_root="$tmp/missing-viam-defaults"
+make_rootfs "$missing_defaults_root"
+rm -f "$missing_defaults_root/etc/viam-defaults.json"
+if "$VERIFY" --rootfs "$missing_defaults_root" >/dev/null 2>&1; then
+    echo "expected missing viam-defaults fixture to fail" >&2
+    exit 1
+fi
+
+viam_defaults_root="$tmp/secret-viam-defaults"
 make_rootfs "$viam_defaults_root"
 cat > "$viam_defaults_root/etc/viam-defaults.json" <<'EOF'
 {"cloud":{"secret":"default-secret"}}
 EOF
 if "$VERIFY" --rootfs "$viam_defaults_root" >/dev/null 2>&1; then
     echo "expected viam-defaults secret fixture to fail" >&2
+    exit 1
+fi
+
+bad_hotspot_root="$tmp/bad-hotspot"
+make_rootfs "$bad_hotspot_root"
+sed -i.bak 's/"gambit-setup"/"viam-setup"/' "$bad_hotspot_root/etc/viam-defaults.json"
+rm -f "$bad_hotspot_root/etc/viam-defaults.json.bak"
+if "$VERIFY" --rootfs "$bad_hotspot_root" >/dev/null 2>&1; then
+    echo "expected bad viam-defaults hotspot fixture to fail" >&2
     exit 1
 fi
 
