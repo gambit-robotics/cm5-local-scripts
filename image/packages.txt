@@ -10,10 +10,13 @@ chromium
 curl
 i2c-tools
 jq
+kanshi
+labwc
 libinput-tools
 libopencv-dev
 libsqlite3-0
 libsqlite3-dev
+lightdm
 pkg-config
 plymouth
 plymouth-themes
@@ -24,4 +27,5 @@ python3-smbus
 python3-venv
 sqlite3
 swaybg
+wlr-randr
 wlrctl

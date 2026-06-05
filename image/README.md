@@ -30,6 +30,14 @@ Run the verifier directly against a mounted rootfs:
 image/verify-rootfs.sh --rootfs /mnt/gambit-root
 ```
 
+For a one-off assembled device that was flashed before these image steps were
+baked in, copy and run the idempotent setup script on the Pi:
+
+```bash
+sudo image/setup-assembled-device.sh
+sudo reboot
+```
+
 Publish a tested image artifact to the private R2 bucket:
 
 ```bash
@@ -55,6 +63,8 @@ should use short-lived signed URLs.
 - `/etc/asound.conf`
 - logind power-button drop-in
 - `i2c-dev` boot module load config so `/dev/i2c-*` adapters are available
+- LightDM/labwc kiosk session setup for `gambitadmin`, with Raspberry Pi
+  first-user setup masked and DSI-2 rotated 180 degrees
 - `/run/gambit` tmpfiles config
 - boot chime asset and systemd unit
 - CPU governor unit
@@ -81,7 +91,8 @@ transactions except for tiny repair work owned by the future bootstrap module.
 The package set includes OpenCV/GoCV system dependencies (`libopencv-dev`,
 `pkg-config`, and build tooling), Python build headers/venv support
 (`python3-dev`, `python3-venv`) for Viam Python modules that compile native
-wheels, plus SQLite runtime and headers (`sqlite3`, `libsqlite3-0`, and
+wheels, the local kiosk display stack (`lightdm`, `labwc`, `kanshi`,
+`wlr-randr`), plus SQLite runtime and headers (`sqlite3`, `libsqlite3-0`, and
 `libsqlite3-dev`).
 
 ## Not Yet Done

@@ -56,6 +56,39 @@ if [[ ! -f "$ROOTFS/etc/modules-load.d/gambit-i2c.conf" ]] || ! grep -Eq '^[[:sp
     fail "missing i2c-dev modules-load config for /dev/i2c-* adapters"
 fi
 
+kiosk_setup="$ROOTFS/usr/local/sbin/gambit-setup-local-kiosk-user"
+if [[ ! -x "$kiosk_setup" ]]; then
+    fail "missing executable local kiosk user setup script"
+else
+    if ! grep -Eq 'GAMBIT_KIOSK_USER:-gambitadmin' "$kiosk_setup"; then
+        fail "local kiosk setup does not default to gambitadmin"
+    fi
+    if ! grep -Eq 'user-session=gambit-labwc' "$kiosk_setup"; then
+        fail "local kiosk setup does not configure gambit-labwc autologin"
+    fi
+    if ! grep -Eq 'mask userconfig\.service' "$kiosk_setup"; then
+        fail "local kiosk setup does not mask Raspberry Pi first-user service"
+    fi
+fi
+
+if [[ ! -L "$ROOTFS/etc/systemd/system/userconfig.service" ]] || [[ "$(readlink "$ROOTFS/etc/systemd/system/userconfig.service")" != "/dev/null" ]]; then
+    fail "userconfig.service is not masked; first-user wizard can block kiosk boot"
+fi
+
+if [[ ! -L "$ROOTFS/etc/systemd/system/multi-user.target.wants/gambit-kiosk-local-user.service" ]]; then
+    fail "gambit-kiosk-local-user.service is not enabled"
+fi
+
+wayland_session="$ROOTFS/usr/share/wayland-sessions/gambit-labwc.desktop"
+if [[ ! -f "$wayland_session" ]] || ! grep -Eq '^Exec=labwc$' "$wayland_session"; then
+    fail "missing gambit-labwc Wayland session"
+fi
+
+labwc_autostart="$ROOTFS/etc/xdg/labwc/autostart"
+if [[ ! -f "$labwc_autostart" ]] || ! grep -Eq 'wlr-randr --output DSI-2 --transform 180' "$labwc_autostart"; then
+    fail "missing DSI-2 180-degree kiosk display transform"
+fi
+
 viam_defaults="$ROOTFS/etc/viam-defaults.json"
 if [[ ! -f "$viam_defaults" ]]; then
     fail "missing /etc/viam-defaults.json for BLE provisioning"
