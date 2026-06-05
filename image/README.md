@@ -78,8 +78,10 @@ Package dependencies are listed in `packages.txt`. Install them during the
 image build stage before running `apply-rootfs.sh`; avoid first-boot apt
 transactions except for tiny repair work owned by the future bootstrap module.
 The package set includes OpenCV/GoCV system dependencies (`libopencv-dev`,
-`pkg-config`, and build tooling) plus SQLite runtime and headers (`sqlite3`,
-`libsqlite3-0`, and `libsqlite3-dev`).
+`pkg-config`, and build tooling), Python build headers/venv support
+(`python3-dev`, `python3-venv`) for Viam Python modules that compile native
+wheels, plus SQLite runtime and headers (`sqlite3`, `libsqlite3-0`, and
+`libsqlite3-dev`).
 
 ## Not Yet Done
 

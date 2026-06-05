@@ -48,6 +48,10 @@ if [[ -f "$ROOTFS/etc/viam.json" ]]; then
     fail "per-device /etc/viam.json is baked into the image"
 fi
 
+if ! find "$ROOTFS/usr/include" -maxdepth 2 -type f -name Python.h 2>/dev/null | grep -q .; then
+    fail "missing Python.h; install python3-dev so Viam Python modules can build native wheels"
+fi
+
 viam_defaults="$ROOTFS/etc/viam-defaults.json"
 if [[ ! -f "$viam_defaults" ]]; then
     fail "missing /etc/viam-defaults.json for BLE provisioning"

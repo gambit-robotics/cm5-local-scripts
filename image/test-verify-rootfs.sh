@@ -9,7 +9,8 @@ trap 'rm -rf "$tmp"' EXIT
 
 make_rootfs() {
     local dir="$1"
-    mkdir -p "$dir/etc" "$dir/usr/local/bin" "$dir/var/lib/gambit"
+    mkdir -p "$dir/etc" "$dir/usr/include/python3.13" "$dir/usr/local/bin" "$dir/var/lib/gambit"
+    touch "$dir/usr/include/python3.13/Python.h"
     cat > "$dir/etc/shadow" <<'EOF'
 root:!:19876:0:99999:7:::
 daemon:*:19876:0:99999:7:::
@@ -58,6 +59,14 @@ cat > "$viam_root/etc/viam.json" <<'EOF'
 EOF
 if "$VERIFY" --rootfs "$viam_root" >/dev/null 2>&1; then
     echo "expected baked viam.json fixture to fail" >&2
+    exit 1
+fi
+
+missing_python_dev_root="$tmp/missing-python-dev"
+make_rootfs "$missing_python_dev_root"
+rm -rf "$missing_python_dev_root/usr/include/python3.13"
+if "$VERIFY" --rootfs "$missing_python_dev_root" >/dev/null 2>&1; then
+    echo "expected missing Python.h fixture to fail" >&2
     exit 1
 fi
 
