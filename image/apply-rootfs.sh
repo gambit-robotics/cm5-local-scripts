@@ -18,12 +18,14 @@ Options:
   --rootfs PATH          Mounted root filesystem for the image.
   --bootfs PATH          Mounted boot firmware filesystem for the image.
   --image-version VALUE  Image version to write to /etc/gambit/image-build.json.
-  --viam-defaults PATH   Optional viam-defaults.json to bake into /etc.
+  --viam-defaults PATH   viam-defaults.json to bake into /etc for BLE provisioning.
   --target-user NAME     User service template owner/name hint (default: gambitadmin).
   --help                 Show this help.
 
 This script writes runtime artifacts into a mounted Raspberry Pi OS rootfs. It
 does not mount images, install apt packages, or bake any per-device secret.
+The image must include Viam provisioning defaults, but must not include
+per-device /etc/viam.json cloud credentials.
 EOF
 }
 
@@ -48,9 +50,8 @@ done
 [[ -d "$BOOTFS" ]] || die "bootfs does not exist: $BOOTFS"
 [[ -f "$ROOTFS/etc/os-release" ]] || die "rootfs does not look mounted: missing $ROOTFS/etc/os-release"
 [[ -n "$TARGET_USER" ]] || die "--target-user must be non-empty"
-if [[ -n "$VIAM_DEFAULTS" && ! -f "$VIAM_DEFAULTS" ]]; then
-    die "--viam-defaults file not found: $VIAM_DEFAULTS"
-fi
+[[ -n "$VIAM_DEFAULTS" ]] || die "--viam-defaults is required for a provisionable image"
+[[ -f "$VIAM_DEFAULTS" ]] || die "--viam-defaults file not found: $VIAM_DEFAULTS"
 
 install_file() {
     local mode="$1"
@@ -322,9 +323,7 @@ awk '/^# Plymouth theme script/{flag=1} flag{print}' "$REPO_DIR/plymouth/setup-b
     | sed '/^EOF$/,$d' > "$plymouth_dir/gambit.script"
 chmod 0644 "$plymouth_dir/gambit.script"
 
-if [[ -n "$VIAM_DEFAULTS" ]]; then
-    install_file 0644 "$VIAM_DEFAULTS" "$ROOTFS/etc/viam-defaults.json"
-fi
+install_file 0644 "$VIAM_DEFAULTS" "$ROOTFS/etc/viam-defaults.json"
 
 write_file 0644 "$ROOTFS/etc/gambit/image-build.json" <<EOF
 {

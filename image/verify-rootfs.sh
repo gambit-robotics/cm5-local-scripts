@@ -7,7 +7,7 @@ usage() {
     cat <<'EOF'
 Usage: image/verify-rootfs.sh --rootfs PATH
 
-Checks a mounted rootfs for the no-secrets image contract.
+Checks a mounted rootfs for the no-secrets and BLE provisioning image contract.
 EOF
 }
 
@@ -44,11 +44,36 @@ while IFS= read -r path; do
     fail "SSH host private key is baked: ${path#$ROOTFS/}"
 done < <(find "$ROOTFS/etc/ssh" -maxdepth 1 -type f -name 'ssh_host_*_key' 2>/dev/null || true)
 
-for viam_config in "$ROOTFS/etc/viam.json" "$ROOTFS/etc/viam-defaults.json"; do
-    if [[ -f "$viam_config" ]] && grep -Eq '"secret"[[:space:]]*:[[:space:]]*"[^"]+"' "$viam_config"; then
-        fail "${viam_config#$ROOTFS/} contains a cloud secret"
+if [[ -f "$ROOTFS/etc/viam.json" ]]; then
+    fail "per-device /etc/viam.json is baked into the image"
+fi
+
+viam_defaults="$ROOTFS/etc/viam-defaults.json"
+if [[ ! -f "$viam_defaults" ]]; then
+    fail "missing /etc/viam-defaults.json for BLE provisioning"
+else
+    if grep -Eq '"secret"[[:space:]]*:[[:space:]]*"[^"]+"' "$viam_defaults"; then
+        fail "etc/viam-defaults.json contains a cloud secret"
     fi
-done
+    if ! grep -Eq '"manufacturer"[[:space:]]*:[[:space:]]*"Gambit Robotics"' "$viam_defaults"; then
+        fail "etc/viam-defaults.json missing manufacturer=Gambit Robotics"
+    fi
+    if ! grep -Eq '"model"[[:space:]]*:[[:space:]]*"CM5"' "$viam_defaults"; then
+        fail "etc/viam-defaults.json missing model=CM5"
+    fi
+    if ! grep -Eq '"fragment_id"[[:space:]]*:[[:space:]]*"f55bd1ed-142c-4232-9ac1-18eba4f99c87"' "$viam_defaults"; then
+        fail "etc/viam-defaults.json missing User Testing fragment_id"
+    fi
+    if ! grep -Eq '"hotspot_interface"[[:space:]]*:[[:space:]]*"wlan0"' "$viam_defaults"; then
+        fail "etc/viam-defaults.json missing hotspot_interface=wlan0"
+    fi
+    if ! grep -Eq '"hotspot_prefix"[[:space:]]*:[[:space:]]*"gambit-setup"' "$viam_defaults"; then
+        fail "etc/viam-defaults.json missing hotspot_prefix=gambit-setup"
+    fi
+    if ! grep -Eq '"hotspot_password"[[:space:]]*:[[:space:]]*"gambitsetup"' "$viam_defaults"; then
+        fail "etc/viam-defaults.json missing hotspot_password expected by the app"
+    fi
+fi
 
 if [[ -d "$ROOTFS/etc/gambit/identity" ]]; then
     while IFS= read -r path; do

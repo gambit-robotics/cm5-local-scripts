@@ -14,6 +14,18 @@ make_rootfs() {
 root:!:19876:0:99999:7:::
 daemon:*:19876:0:99999:7:::
 EOF
+    cat > "$dir/etc/viam-defaults.json" <<'EOF'
+{
+  "network_configuration": {
+    "manufacturer": "Gambit Robotics",
+    "model": "CM5",
+    "fragment_id": "f55bd1ed-142c-4232-9ac1-18eba4f99c87",
+    "hotspot_interface": "wlan0",
+    "hotspot_prefix": "gambit-setup",
+    "hotspot_password": "gambitsetup"
+  }
+}
+EOF
 }
 
 pass_root="$tmp/pass"
@@ -39,23 +51,40 @@ if "$VERIFY" --rootfs "$key_root" >/dev/null 2>&1; then
     exit 1
 fi
 
-viam_root="$tmp/viam"
+viam_root="$tmp/viam-json"
 make_rootfs "$viam_root"
 cat > "$viam_root/etc/viam.json" <<'EOF'
-{"cloud":{"secret":"fleet-secret"}}
+{"cloud":{"id":"device-id"}}
 EOF
 if "$VERIFY" --rootfs "$viam_root" >/dev/null 2>&1; then
-    echo "expected viam secret fixture to fail" >&2
+    echo "expected baked viam.json fixture to fail" >&2
     exit 1
 fi
 
-viam_defaults_root="$tmp/viam-defaults"
+missing_defaults_root="$tmp/missing-viam-defaults"
+make_rootfs "$missing_defaults_root"
+rm -f "$missing_defaults_root/etc/viam-defaults.json"
+if "$VERIFY" --rootfs "$missing_defaults_root" >/dev/null 2>&1; then
+    echo "expected missing viam-defaults fixture to fail" >&2
+    exit 1
+fi
+
+viam_defaults_root="$tmp/secret-viam-defaults"
 make_rootfs "$viam_defaults_root"
 cat > "$viam_defaults_root/etc/viam-defaults.json" <<'EOF'
 {"cloud":{"secret":"default-secret"}}
 EOF
 if "$VERIFY" --rootfs "$viam_defaults_root" >/dev/null 2>&1; then
     echo "expected viam-defaults secret fixture to fail" >&2
+    exit 1
+fi
+
+bad_hotspot_root="$tmp/bad-hotspot"
+make_rootfs "$bad_hotspot_root"
+sed -i.bak 's/"gambit-setup"/"viam-setup"/' "$bad_hotspot_root/etc/viam-defaults.json"
+rm -f "$bad_hotspot_root/etc/viam-defaults.json.bak"
+if "$VERIFY" --rootfs "$bad_hotspot_root" >/dev/null 2>&1; then
+    echo "expected bad viam-defaults hotspot fixture to fail" >&2
     exit 1
 fi
 

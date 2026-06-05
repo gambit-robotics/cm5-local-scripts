@@ -21,7 +21,7 @@ sudo image/apply-rootfs.sh \
   --rootfs /mnt/gambit-root \
   --bootfs /mnt/gambit-boot \
   --image-version 0.1.0-dev \
-  --viam-defaults /path/to/viam-defaults.json
+  --viam-defaults image/viam-defaults.user-testing.json
 ```
 
 Run the verifier directly against a mounted rootfs:
@@ -60,7 +60,8 @@ should use short-lived signed URLs.
 - kiosk, buttons, and idle-dim runtime scripts/templates under `/usr/local` and
   `/usr/local/share/gambit`
 - Plymouth assets/theme files
-- optional `/etc/viam-defaults.json`
+- `/etc/viam-defaults.json` for Viam BLE provisioning in the User Testing
+  location; the image must not contain per-device `/etc/viam.json`
 - image metadata at `/etc/gambit/image-build.json`
 
 ## R2 Release Contents

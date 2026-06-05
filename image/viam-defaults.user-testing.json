@@ -1,0 +1,10 @@
+{
+  "network_configuration": {
+    "manufacturer": "Gambit Robotics",
+    "model": "CM5",
+    "fragment_id": "f55bd1ed-142c-4232-9ac1-18eba4f99c87",
+    "hotspot_interface": "wlan0",
+    "hotspot_prefix": "gambit-setup",
+    "hotspot_password": "gambitsetup"
+  }
+}
