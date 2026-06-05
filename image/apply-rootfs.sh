@@ -89,6 +89,10 @@ install_file 0644 "$REPO_DIR/config/config.txt" "$BOOTFS/config.txt"
 install_file 0644 "$REPO_DIR/config/asound.conf" "$ROOTFS/etc/asound.conf"
 install_file 0644 "$REPO_DIR/config/logind-power-button.conf" \
     "$ROOTFS/etc/systemd/logind.conf.d/50-gambit-power-button.conf"
+write_file 0644 "$ROOTFS/etc/modules-load.d/gambit-i2c.conf" <<'EOF'
+# Expose /dev/i2c-* adapters for Viam modules and local button/sensor tooling.
+i2c-dev
+EOF
 
 # Raspberry Pi's chromium package may install a Google API key env file. The
 # Gambit image should not bake third-party API keys, even package defaults.

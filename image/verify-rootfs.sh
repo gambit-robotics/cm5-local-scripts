@@ -52,6 +52,10 @@ if ! find "$ROOTFS/usr/include" -maxdepth 2 -type f -name Python.h 2>/dev/null |
     fail "missing Python.h; install python3-dev so Viam Python modules can build native wheels"
 fi
 
+if [[ ! -f "$ROOTFS/etc/modules-load.d/gambit-i2c.conf" ]] || ! grep -Eq '^[[:space:]]*i2c-dev([[:space:]]*#.*)?$' "$ROOTFS/etc/modules-load.d/gambit-i2c.conf"; then
+    fail "missing i2c-dev modules-load config for /dev/i2c-* adapters"
+fi
+
 viam_defaults="$ROOTFS/etc/viam-defaults.json"
 if [[ ! -f "$viam_defaults" ]]; then
     fail "missing /etc/viam-defaults.json for BLE provisioning"

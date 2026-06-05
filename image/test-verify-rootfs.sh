@@ -9,8 +9,9 @@ trap 'rm -rf "$tmp"' EXIT
 
 make_rootfs() {
     local dir="$1"
-    mkdir -p "$dir/etc" "$dir/usr/include/python3.13" "$dir/usr/local/bin" "$dir/var/lib/gambit"
+    mkdir -p "$dir/etc/modules-load.d" "$dir/usr/include/python3.13" "$dir/usr/local/bin" "$dir/var/lib/gambit"
     touch "$dir/usr/include/python3.13/Python.h"
+    echo i2c-dev > "$dir/etc/modules-load.d/gambit-i2c.conf"
     cat > "$dir/etc/shadow" <<'EOF'
 root:!:19876:0:99999:7:::
 daemon:*:19876:0:99999:7:::
@@ -67,6 +68,14 @@ make_rootfs "$missing_python_dev_root"
 rm -rf "$missing_python_dev_root/usr/include/python3.13"
 if "$VERIFY" --rootfs "$missing_python_dev_root" >/dev/null 2>&1; then
     echo "expected missing Python.h fixture to fail" >&2
+    exit 1
+fi
+
+missing_i2c_dev_root="$tmp/missing-i2c-dev"
+make_rootfs "$missing_i2c_dev_root"
+rm -f "$missing_i2c_dev_root/etc/modules-load.d/gambit-i2c.conf"
+if "$VERIFY" --rootfs "$missing_i2c_dev_root" >/dev/null 2>&1; then
+    echo "expected missing i2c-dev modules-load fixture to fail" >&2
     exit 1
 fi
 

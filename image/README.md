@@ -54,6 +54,7 @@ should use short-lived signed URLs.
 - `/boot/firmware/config.txt` from `config/config.txt`
 - `/etc/asound.conf`
 - logind power-button drop-in
+- `i2c-dev` boot module load config so `/dev/i2c-*` adapters are available
 - `/run/gambit` tmpfiles config
 - boot chime asset and systemd unit
 - CPU governor unit
