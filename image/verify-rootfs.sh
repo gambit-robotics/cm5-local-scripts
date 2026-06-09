@@ -63,7 +63,7 @@ else
     if ! grep -Eq 'GAMBIT_KIOSK_USER:-gambitadmin' "$kiosk_setup"; then
         fail "local kiosk setup does not default to gambitadmin"
     fi
-    if ! grep -Eq 'user-session=gambit-labwc' "$kiosk_setup"; then
+    if ! grep -Eq 'session="gambit-labwc"' "$kiosk_setup"; then
         fail "local kiosk setup does not configure gambit-labwc autologin"
     fi
     if ! grep -Eq 'mask userconfig\.service' "$kiosk_setup"; then
@@ -102,7 +102,7 @@ else
     if ! grep -Eq '"model"[[:space:]]*:[[:space:]]*"CM5"' "$viam_defaults"; then
         fail "etc/viam-defaults.json missing model=CM5"
     fi
-    if ! grep -Eq '"fragment_id"[[:space:]]*:[[:space:]]*"f55bd1ed-142c-4232-9ac1-18eba4f99c87"' "$viam_defaults"; then
+    if ! grep -Eq '"fragment_id"[[:space:]]*:[[:space:]]*"4af2846b-610d-4ec7-8193-cd195efa0679"' "$viam_defaults"; then
         fail "etc/viam-defaults.json missing User Testing fragment_id"
     fi
     if ! grep -Eq '"hotspot_interface"[[:space:]]*:[[:space:]]*"wlan0"' "$viam_defaults"; then
