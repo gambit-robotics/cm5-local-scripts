@@ -197,6 +197,68 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 enable_system_unit gambit-cpu-governor.service
+
+# One-time post-provision viam-agent activation. The factory image ships an
+# older viam-agent; once the freshly-claimed device downloads its target
+# version, viam-agent only activates it on its own update window. This nudges
+# activation so setup ends on a current agent (and the matching viam-server).
+# A newer binary in the cache means the agent's target already advanced past
+# the running version, so a restart swaps it in. Self-bounded and one-shot.
+write_file 0755 "$ROOTFS/usr/local/bin/gambit-agent-activate" <<'EOF'
+#!/bin/sh
+set -eu
+
+MARKER=/var/lib/gambit/agent-activate.done
+CACHE=/opt/viam/cache
+DEADLINE=$(( $(date +%s) + 600 ))
+
+agent_version() {
+    /opt/viam/bin/viam-agent --version 2>/dev/null \
+        | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+}
+
+newest_cached() {
+    ls -1 "$CACHE"/viam-agent-v*-* 2>/dev/null \
+        | sed -n 's#.*/viam-agent-v\([0-9][0-9.]*\)-.*#\1#p' \
+        | sort -V | tail -1
+}
+
+# is_newer A B -> A > B
+is_newer() {
+    [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ] && [ "$1" != "$2" ]
+}
+
+while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+    running="$(agent_version)"
+    newest="$(newest_cached)"
+    if [ -n "$running" ] && [ -n "$newest" ] && is_newer "$newest" "$running"; then
+        logger -t gambit-agent-activate "activating viam-agent $newest (was $running)"
+        systemctl restart viam-agent || true
+        break
+    fi
+    sleep 30
+done
+
+install -d -m 0755 /var/lib/gambit
+date -u +%Y-%m-%dT%H:%M:%SZ > "$MARKER"
+EOF
+write_file 0644 "$ROOTFS/etc/systemd/system/gambit-agent-activate.service" <<'EOF'
+[Unit]
+Description=Gambit: activate newest downloaded viam-agent (one-time, post-provision)
+After=viam-agent.service network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/gambit/agent-activate.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/gambit-agent-activate
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target
+EOF
+enable_system_unit gambit-agent-activate.service
+
 install_file 0755 "$REPO_DIR/lowpower/dim.sh" "$ROOTFS/usr/local/bin/gambit-dim"
 install_file 0755 "$REPO_DIR/lowpower/gambit-input-idle.sh" \
     "$ROOTFS/usr/local/bin/gambit-input-idle"
