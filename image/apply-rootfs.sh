@@ -404,6 +404,10 @@ def viam_agent_active() -> bool:
     return command_output(["systemctl", "is-active", "viam-agent.service"]).strip() == "active"
 
 
+def network_online() -> bool:
+    return bool(command_output(["ip", "route", "show", "default"]).strip())
+
+
 def viam_agent_logs() -> str:
     return command_output(
         ["journalctl", "-u", "viam-agent.service", "-n", "120", "--no-pager"],
@@ -431,6 +435,12 @@ def provisioning_state(target: str) -> dict[str, object]:
 
     if not viam_agent_active():
         return {"ready": False, "message": "Starting Viam services..."}
+
+    if not network_online():
+        return {
+            "ready": False,
+            "message": "Waiting for Wi-Fi. Finish network setup in the Gambit app.",
+        }
 
     logs = viam_agent_logs()
     installing = (
@@ -560,6 +570,8 @@ SPLASH_DIR="${SPLASH_DIR:-/usr/local/share/gambit/kiosk-splash}"
 READY_LOG_INTERVAL="${READY_LOG_INTERVAL:-30}"
 WEB_CHECK_INTERVAL="${WEB_CHECK_INTERVAL:-5}"
 WEB_FAILURE_LIMIT="${WEB_FAILURE_LIMIT:-3}"
+RESTART_REQUESTED="/tmp/gambit-kiosk-restart-requested.$$"
+rm -f "$RESTART_REQUESTED"
 
 echo "Waiting for Wayland display..."
 for _ in $(seq 1 180); do
@@ -580,7 +592,7 @@ pkill -u "$(whoami)" -f "gambit-kiosk-splash-server.*--port $SPLASH_PORT" 2>/dev
 
 SPLASH_DIR="$SPLASH_DIR" KIOSK_URL="$KIOSK_URL" gambit-kiosk-splash-server --port "$SPLASH_PORT" >/tmp/gambit-kiosk-splash.log 2>&1 &
 SPLASH_PID=$!
-trap 'kill "$SPLASH_PID" 2>/dev/null || true' EXIT
+trap 'kill "$SPLASH_PID" 2>/dev/null || true; rm -f "$RESTART_REQUESTED"' EXIT
 
 encoded_target="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$KIOSK_URL")"
 SPLASH_URL="http://127.0.0.1:${SPLASH_PORT}/?target=${encoded_target}"
@@ -626,16 +638,25 @@ echo "Web server ready after ${waited}s."
         failures=$((failures + 1))
         echo "Kiosk web health check failed (${failures}/${WEB_FAILURE_LIMIT})"
         if (( failures >= WEB_FAILURE_LIMIT )); then
-            echo "Kiosk web server unavailable; restarting Chromium at splash."
+            echo "Kiosk web server unavailable; requesting kiosk restart at splash."
+            touch "$RESTART_REQUESTED"
             kill "$CHROMIUM_PID" 2>/dev/null || true
             exit 0
         fi
     done
 ) &
 WATCHDOG_PID=$!
-trap 'kill "$SPLASH_PID" "$WATCHDOG_PID" 2>/dev/null || true' EXIT
+trap 'kill "$SPLASH_PID" "$WATCHDOG_PID" 2>/dev/null || true; rm -f "$RESTART_REQUESTED"' EXIT
 
+set +e
 wait "$CHROMIUM_PID"
+chromium_status=$?
+set -e
+if [[ -f "$RESTART_REQUESTED" ]]; then
+    echo "Exiting nonzero so systemd restarts kiosk at splash."
+    exit 1
+fi
+exit "$chromium_status"
 EOF
 
 write_file 0644 "$ROOTFS/usr/local/share/gambit/systemd/user/kiosk.service" <<'EOF'
@@ -648,7 +669,7 @@ Environment=WAYLAND_DISPLAY=wayland-0
 Environment=XCURSOR_THEME=invisible-cursor
 Environment=XCURSOR_SIZE=1
 ExecStart=/usr/local/bin/gambit-start-kiosk
-Restart=on-failure
+Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
@@ -770,6 +791,79 @@ ExecStart=/usr/local/sbin/gambit-setup-local-kiosk-user
 WantedBy=multi-user.target
 EOF
 enable_system_unit gambit-kiosk-local-user.service
+
+write_file 0755 "$ROOTFS/usr/local/sbin/gambit-kiosk-recovery" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+KIOSK_USER="${GAMBIT_KIOSK_USER:-gambitadmin}"
+CHECK_INTERVAL="${CHECK_INTERVAL:-10}"
+MISSING_LIMIT="${MISSING_LIMIT:-3}"
+BOOT_GRACE="${BOOT_GRACE:-45}"
+LIGHTDM_RESTART_COOLDOWN="${LIGHTDM_RESTART_COOLDOWN:-60}"
+
+log() {
+    systemd-cat -t gambit-kiosk-recovery -p info echo "$*"
+}
+
+sleep "$BOOT_GRACE"
+
+missing_count=0
+last_restart=0
+
+while true; do
+    now="$(date +%s)"
+
+    if ! systemctl is-active --quiet lightdm.service; then
+        if (( now - last_restart >= LIGHTDM_RESTART_COOLDOWN )); then
+            log "lightdm inactive; restarting display manager"
+            systemctl restart lightdm.service || true
+            last_restart="$now"
+        fi
+        missing_count=0
+        sleep "$CHECK_INTERVAL"
+        continue
+    fi
+
+    if pgrep -u "$KIOSK_USER" -f 'chromium.*user-data-dir=/tmp/chromium-kiosk' >/dev/null 2>&1; then
+        missing_count=0
+        sleep "$CHECK_INTERVAL"
+        continue
+    fi
+
+    missing_count=$((missing_count + 1))
+    log "kiosk browser missing (${missing_count}/${MISSING_LIMIT})"
+
+    if (( missing_count >= MISSING_LIMIT && now - last_restart >= LIGHTDM_RESTART_COOLDOWN )); then
+        log "kiosk browser did not recover; restarting lightdm"
+        systemctl restart lightdm.service || true
+        last_restart="$now"
+        missing_count=0
+    fi
+
+    sleep "$CHECK_INTERVAL"
+done
+EOF
+
+write_file 0644 "$ROOTFS/etc/systemd/system/gambit-kiosk-recovery.service" <<EOF
+[Unit]
+Description=Gambit kiosk display recovery watchdog
+After=lightdm.service
+Wants=lightdm.service
+
+[Service]
+Type=simple
+Environment=GAMBIT_KIOSK_USER=$TARGET_USER
+ExecStart=/usr/local/sbin/gambit-kiosk-recovery
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+enable_system_unit gambit-kiosk-recovery.service
 
 write_file 0755 "$ROOTFS/usr/local/bin/gambit-button-controller" <<'EOF'
 #!/usr/bin/env python3

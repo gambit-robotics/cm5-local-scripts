@@ -97,8 +97,14 @@ else
     if ! grep -Fq 'journalctl' "$splash_server"; then
         fail "local kiosk splash state server does not inspect viam-agent progress"
     fi
+    if ! grep -Fq '["ip", "route", "show", "default"]' "$splash_server"; then
+        fail "local kiosk splash state server does not check network readiness before module downloads"
+    fi
     if ! grep -Fq 'connect with Bluetooth to finish setup' "$splash_server"; then
         fail "local kiosk splash state server does not explain BLE setup wait"
+    fi
+    if ! grep -Fq 'Waiting for Wi-Fi' "$splash_server"; then
+        fail "local kiosk splash state server does not explain Wi-Fi wait before module downloads"
     fi
     if ! grep -Fq 'Configuring your robot' "$splash_server"; then
         fail "local kiosk splash state server does not explain post-provisioning robot setup"
@@ -136,6 +142,10 @@ else
     if ! grep -Eq 'WEB_FAILURE_LIMIT' "$kiosk_launcher"; then
         fail "kiosk launcher does not monitor local app health after startup"
     fi
+    if ! grep -Fq 'RESTART_REQUESTED=' "$kiosk_launcher" ||
+        ! grep -Fq 'Exiting nonzero so systemd restarts kiosk at splash.' "$kiosk_launcher"; then
+        fail "kiosk launcher does not force systemd restart after web health failure"
+    fi
 fi
 
 dim_script="$ROOTFS/usr/local/bin/gambit-dim"
@@ -160,6 +170,9 @@ fi
 kiosk_service_template="$ROOTFS/usr/local/share/gambit/systemd/user/kiosk.service"
 if [[ ! -f "$kiosk_service_template" ]] || ! grep -Fq 'Environment=XCURSOR_THEME=invisible-cursor' "$kiosk_service_template"; then
     fail "kiosk service does not set invisible cursor theme"
+fi
+if ! grep -Fq 'Restart=always' "$kiosk_service_template"; then
+    fail "kiosk service does not restart after clean browser exit"
 fi
 
 kiosk_setup="$ROOTFS/usr/local/sbin/gambit-setup-local-kiosk-user"
@@ -187,6 +200,29 @@ fi
 
 if [[ ! -L "$ROOTFS/etc/systemd/system/multi-user.target.wants/gambit-kiosk-local-user.service" ]]; then
     fail "gambit-kiosk-local-user.service is not enabled"
+fi
+
+kiosk_recovery="$ROOTFS/usr/local/sbin/gambit-kiosk-recovery"
+if [[ ! -x "$kiosk_recovery" ]]; then
+    fail "missing executable kiosk recovery watchdog"
+else
+    if ! grep -Fq 'lightdm.service' "$kiosk_recovery"; then
+        fail "kiosk recovery watchdog does not restart LightDM"
+    fi
+    if ! grep -Fq 'chromium.*user-data-dir=/tmp/chromium-kiosk' "$kiosk_recovery"; then
+        fail "kiosk recovery watchdog does not detect the kiosk browser"
+    fi
+    if ! grep -Fq 'MISSING_LIMIT' "$kiosk_recovery"; then
+        fail "kiosk recovery watchdog does not debounce missing browser recovery"
+    fi
+fi
+
+kiosk_recovery_service="$ROOTFS/etc/systemd/system/gambit-kiosk-recovery.service"
+if [[ ! -f "$kiosk_recovery_service" ]] || ! grep -Fq 'ExecStart=/usr/local/sbin/gambit-kiosk-recovery' "$kiosk_recovery_service"; then
+    fail "missing kiosk recovery systemd service"
+fi
+if [[ ! -L "$ROOTFS/etc/systemd/system/multi-user.target.wants/gambit-kiosk-recovery.service" ]]; then
+    fail "gambit-kiosk-recovery.service is not enabled"
 fi
 
 wayland_session="$ROOTFS/usr/share/wayland-sessions/gambit-labwc.desktop"
