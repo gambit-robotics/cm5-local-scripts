@@ -90,7 +90,9 @@ ifeq ($(USER),)
 endif
 	@echo "=== Updating kiosk for $(USER) ==="
 	sudo ./kiosk/setup-kiosk-wayland.sh $(USER)
-	sudo -u $(USER) XDG_RUNTIME_DIR=/run/user/$$(id -u $(USER)) systemctl --user restart chromium-kiosk.service 2>/dev/null || true
+	sudo systemctl daemon-reload
+	sudo systemctl enable --now gambit-kiosk-recovery.service
+	sudo -u $(USER) XDG_RUNTIME_DIR=/run/user/$$(id -u $(USER)) systemctl --user restart kiosk.service 2>/dev/null || true
 	@echo "Done. Service restarted."
 
 update-buttons:

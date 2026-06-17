@@ -51,6 +51,8 @@ SPLASH_PORT="${SPLASH_PORT:-8764}"
 gambit-kiosk-splash-server --port "$SPLASH_PORT"
 SPLASH_URL="http://127.0.0.1:${SPLASH_PORT}/"
 WEB_FAILURE_LIMIT="${WEB_FAILURE_LIMIT:-3}"
+RESTART_REQUESTED="/tmp/gambit-kiosk-restart-requested.$$"
+echo "Exiting nonzero so systemd restarts kiosk at splash."
 EOF
     chmod 0755 "$dir/usr/local/bin/gambit-start-kiosk"
     cat > "$dir/usr/local/bin/gambit-kiosk-splash-server" <<'EOF'
@@ -58,7 +60,9 @@ EOF
 # /state
 # /etc/viam.json
 # journalctl
+# ["ip", "route", "show", "default"]
 # connect with Bluetooth to finish setup
+# Waiting for Wi-Fi
 # Configuring your robot
 EOF
     chmod 0755 "$dir/usr/local/bin/gambit-kiosk-splash-server"
@@ -80,6 +84,7 @@ EOF
 [Service]
 Environment=XCURSOR_THEME=invisible-cursor
 Environment=XCURSOR_SIZE=1
+Restart=always
 EOF
     cat > "$dir/etc/systemd/system/gambit-default-brightness.service" <<'EOF'
 [Unit]
@@ -101,6 +106,18 @@ EOF
     chmod 0755 "$dir/usr/local/sbin/gambit-setup-local-kiosk-user"
     touch "$dir/etc/systemd/system/gambit-kiosk-local-user.service"
     ln -sfn ../gambit-kiosk-local-user.service "$dir/etc/systemd/system/multi-user.target.wants/gambit-kiosk-local-user.service"
+    cat > "$dir/usr/local/sbin/gambit-kiosk-recovery" <<'EOF'
+#!/usr/bin/env bash
+systemctl restart lightdm.service
+pgrep -u "$KIOSK_USER" -f 'chromium.*user-data-dir=/tmp/chromium-kiosk'
+MISSING_LIMIT="${MISSING_LIMIT:-3}"
+EOF
+    chmod 0755 "$dir/usr/local/sbin/gambit-kiosk-recovery"
+    cat > "$dir/etc/systemd/system/gambit-kiosk-recovery.service" <<'EOF'
+[Service]
+ExecStart=/usr/local/sbin/gambit-kiosk-recovery
+EOF
+    ln -sfn ../gambit-kiosk-recovery.service "$dir/etc/systemd/system/multi-user.target.wants/gambit-kiosk-recovery.service"
     ln -sfn /dev/null "$dir/etc/systemd/system/userconfig.service"
     ln -sfn /dev/null "$dir/etc/systemd/system/dev-dri-renderD128.device"
     cat > "$dir/usr/share/wayland-sessions/gambit-labwc.desktop" <<'EOF'
@@ -123,7 +140,7 @@ EOF
   "network_configuration": {
     "manufacturer": "Gambit Robotics",
     "model": "CM5",
-    "fragment_id": "f55bd1ed-142c-4232-9ac1-18eba4f99c87",
+    "fragment_id": "4af2846b-610d-4ec7-8193-cd195efa0679",
     "hotspot_interface": "wlan0",
     "hotspot_prefix": "gambit-setup",
     "hotspot_password": "gambitsetup"
@@ -252,6 +269,14 @@ make_rootfs "$missing_render_mask_root"
 rm -f "$missing_render_mask_root/etc/systemd/system/dev-dri-renderD128.device"
 if "$VERIFY" --rootfs "$missing_render_mask_root" >/dev/null 2>&1; then
     echo "expected missing render device mask fixture to fail" >&2
+    exit 1
+fi
+
+missing_kiosk_recovery_root="$tmp/missing-kiosk-recovery"
+make_rootfs "$missing_kiosk_recovery_root"
+rm -f "$missing_kiosk_recovery_root/usr/local/sbin/gambit-kiosk-recovery"
+if "$VERIFY" --rootfs "$missing_kiosk_recovery_root" >/dev/null 2>&1; then
+    echo "expected missing kiosk recovery fixture to fail" >&2
     exit 1
 fi
 

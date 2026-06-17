@@ -66,6 +66,8 @@ sudo reboot
 |------|---------|
 | `~/start-kiosk.sh` | Kiosk launcher script |
 | `~/.config/systemd/user/kiosk.service` | User systemd service |
+| `/usr/local/sbin/gambit-kiosk-recovery` | Root watchdog that recovers a missing kiosk session |
+| `/etc/systemd/system/gambit-kiosk-recovery.service` | Root systemd service for kiosk recovery |
 
 ---
 
@@ -83,18 +85,28 @@ systemctl --user restart kiosk.service
 
 # Stop
 systemctl --user stop kiosk.service
+
+# Check root recovery watchdog
+sudo systemctl status gambit-kiosk-recovery.service
+
+# View recovery actions
+sudo journalctl -u gambit-kiosk-recovery.service -f
 ```
 
 ---
 
 ## Configuration
 
-Edit `~/start-kiosk.sh` to change:
+Edit `/usr/local/bin/gambit-start-kiosk` or the user service environment to change:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `KIOSK_URL` | `http://127.0.0.1:8765/kiosk/help` | URL to display |
-| `MAX_WAIT` | `60` | Seconds to wait for web server |
+| `SPLASH_PORT` | `8764` | Local splash server port |
+| `WEB_CHECK_INTERVAL` | `5` | Seconds between local app health checks |
+| `WEB_FAILURE_LIMIT` | `3` | Failed health checks before restarting Chromium at the splash |
+| `MISSING_LIMIT` | `3` | Recovery watchdog missing-browser checks before restarting LightDM |
+| `LIGHTDM_RESTART_COOLDOWN` | `60` | Minimum seconds between LightDM recovery restarts |
 
 ---
 
@@ -108,11 +120,13 @@ Edit `~/start-kiosk.sh` to change:
 **Black screen / Chromium crashes**
 - Check Chromium can run manually: `chromium --version`
 - Try running the kiosk script directly: `~/start-kiosk.sh`
+- If `systemctl --user` cannot reach the user manager, the root recovery watchdog restarts LightDM after the kiosk browser is missing for several checks.
 
 **Web server not ready**
-- The script waits up to 60 seconds
-- Ensure your web server starts before the kiosk service
-- Adjust `MAX_WAIT` in `~/start-kiosk.sh` if needed
+- The script keeps Chromium on the local splash until `KIOSK_URL` is reachable.
+- If the local app later becomes unavailable, the launcher exits nonzero so `kiosk.service` restarts at the splash and waits again.
+- `kiosk.service` uses `Restart=always` so a clean Chromium exit does not leave the display dark.
+- `gambit-kiosk-recovery.service` covers the wider failure where the user session or user service manager is gone; it restarts LightDM so autologin recreates the Wayland session.
 
 **Need to access the desktop for debugging (no SSH/WiFi)**
 - Plug in a keyboard and press `Ctrl+Alt+F2` for a TTY login shell
