@@ -182,7 +182,7 @@ else
     if ! grep -Eq 'GAMBIT_KIOSK_USER:-gambitadmin' "$kiosk_setup"; then
         fail "local kiosk setup does not default to gambitadmin"
     fi
-    if ! grep -Eq 'session="gambit-labwc"' "$kiosk_setup"; then
+    if ! grep -Eq 'user-session=gambit-labwc' "$kiosk_setup"; then
         fail "local kiosk setup does not configure gambit-labwc autologin"
     fi
     if ! grep -Eq 'mask userconfig\.service' "$kiosk_setup"; then
