@@ -18,6 +18,7 @@ help:
 	@echo "  make install-buttons  Install volume buttons only"
 	@echo "  make install-audio    Install boot chime only"
 	@echo "  make install-lowpower Install low-power config (CPU + gpu_mem)"
+	@echo "  make install-tailscale Join Gambit tailnet (TS_AUTHKEY=... or /etc/gambit/tailscale-authkey)"
 	@echo "  make uninstall        Remove all installed components"
 	@echo ""
 	@echo "On Pi - Update (update + restart service):"
@@ -152,3 +153,6 @@ ifeq ($(ARTIFACT),)
 	$(error ARTIFACT is required)
 endif
 	image/publish-r2.sh --release "$(RELEASE)" --artifact "$(ARTIFACT)" $(if $(ROOTFS),--rootfs "$(ROOTFS)",) $(if $(R2_BUCKET),--bucket "$(R2_BUCKET)",) $(if $(R2_PREFIX),--prefix "$(R2_PREFIX)",) $(if $(R2_ENDPOINT_URL),--endpoint-url "$(R2_ENDPOINT_URL)",) $(if $(PRINT_URLS),--print-urls,) $(if $(ALLOW_UNVERIFIED_ROOTFS),--allow-unverified-rootfs,) $(if $(DRY_RUN),--dry-run,)
+
+install-tailscale:
+	cd tailscale && sudo TS_AUTHKEY="$(TS_AUTHKEY)" ./setup-tailscale.sh
