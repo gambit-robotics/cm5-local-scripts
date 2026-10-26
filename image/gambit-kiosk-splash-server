@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import socket
 import subprocess
 import urllib.error
 import urllib.request
@@ -54,24 +55,61 @@ def package_count() -> int:
         return 0
 
 
+AGENT_CONFIG_CACHE = "/opt/viam/cache/config_cache.json"
+VIAM_DEFAULTS = "/etc/viam-defaults.json"
+# viam-agent serves its setup page on its hotspot, at an address it hard-codes.
+SETUP_ADDRESS = "10.42.0.1"
+
+
+def network_configuration(path: str) -> dict[str, object]:
+    try:
+        with open(path, encoding="utf-8") as f:
+            conf = json.load(f).get("network_configuration")
+    except (OSError, ValueError, AttributeError):
+        return {}
+    return conf if isinstance(conf, dict) else {}
+
+
+def setup_network(hostname: str) -> dict[str, str]:
+    """The setup hotspot viam-agent opens, worked out the way the agent does:
+    its own defaults, then the image's /etc/viam-defaults.json, then the
+    config it cached from the cloud."""
+    conf: dict[str, object] = {"hotspot_prefix": "viam-setup", "hotspot_password": "viamsetup"}
+    for path in (VIAM_DEFAULTS, AGENT_CONFIG_CACHE):
+        conf.update({key: value for key, value in network_configuration(path).items() if value})
+    ssid = str(conf.get("hotspot_ssid") or f"{conf['hotspot_prefix']}-{hostname.lower()}")
+    return {"ssid": ssid[:32], "password": str(conf["hotspot_password"]), "address": SETUP_ADDRESS}
+
+
+def hotspot_up() -> bool:
+    return f"inet {SETUP_ADDRESS}/" in command_output(["ip", "-4", "-o", "addr", "show"])
+
+
+def with_setup(state: dict[str, object]) -> dict[str, object]:
+    """Adds how to set the device up from a phone, while the hotspot is up."""
+    if hotspot_up():
+        state["setup"] = setup_network(socket.gethostname())
+    return state
+
+
 def provisioning_state(target: str) -> dict[str, object]:
     if target_ready(target):
         return {"ready": True, "message": "Opening Gambit..."}
 
     if not os.path.exists("/etc/viam.json"):
-        return {
+        return with_setup({
             "ready": False,
             "message": "Open the Gambit app and connect with Bluetooth to finish setup.",
-        }
+        })
 
     if not viam_agent_active():
         return {"ready": False, "message": "Starting Viam services..."}
 
     if not network_online():
-        return {
+        return with_setup({
             "ready": False,
             "message": "Waiting for Wi-Fi. Finish network setup in the Gambit app.",
-        }
+        })
 
     logs = viam_agent_logs()
     installing = (

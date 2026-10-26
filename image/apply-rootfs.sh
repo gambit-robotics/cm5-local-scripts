@@ -395,6 +395,22 @@ write_file 0644 "$ROOTFS/usr/local/share/gambit/kiosk-splash/index.html" <<'EOF'
       0% { transform: translateX(-100%); }
       100% { transform: translateX(240%); }
     }
+
+    .setup {
+      margin-top: 1.6rem;
+      padding-top: 1.2rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.14);
+    }
+
+    .setup p {
+      margin: 0.35rem 0 0;
+      font-size: clamp(1rem, 2.6vw, 1.3rem);
+    }
+
+    .setup b {
+      color: #f5f7fb;
+      font-family: ui-monospace, Menlo, monospace;
+    }
   </style>
 </head>
 <body>
@@ -402,16 +418,32 @@ write_file 0644 "$ROOTFS/usr/local/share/gambit/kiosk-splash/index.html" <<'EOF'
     <h1>Starting Gambit</h1>
     <p id="status">Starting local services...</p>
     <div class="bar" aria-hidden="true"></div>
+    <div class="setup" id="setup" hidden>
+      <p>Or, from a phone or laptop:</p>
+      <p>Join the Wi-Fi <b id="setup-ssid"></b><span id="setup-password-line">, password <b id="setup-password"></b></span></p>
+      <p>Then open <b id="setup-address"></b></p>
+    </div>
   </main>
   <script>
     const target = new URLSearchParams(window.location.search).get("target") || "http://127.0.0.1:8765/kiosk/help";
     const status = document.getElementById("status");
+    const setup = document.getElementById("setup");
+
+    function showSetup(network) {
+      setup.hidden = !network;
+      if (!network) return;
+      document.getElementById("setup-ssid").textContent = network.ssid;
+      document.getElementById("setup-password").textContent = network.password;
+      document.getElementById("setup-password-line").hidden = !network.password;
+      document.getElementById("setup-address").textContent = network.address;
+    }
 
     async function checkReady() {
       try {
         const response = await fetch(`/state?target=${encodeURIComponent(target)}`, { cache: "no-store" });
         const state = await response.json();
         status.textContent = state.message || "Starting Gambit services...";
+        showSetup(state.setup);
         if (state.ready) {
           window.location.replace(target);
           return;

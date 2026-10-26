@@ -144,6 +144,7 @@ endif
 
 image-test:
 	image/test-verify-rootfs.sh
+	image/test-kiosk-splash-server.py
 
 image-publish-r2:
 ifeq ($(RELEASE),)
