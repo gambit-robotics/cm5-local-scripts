@@ -395,6 +395,22 @@ write_file 0644 "$ROOTFS/usr/local/share/gambit/kiosk-splash/index.html" <<'EOF'
       0% { transform: translateX(-100%); }
       100% { transform: translateX(240%); }
     }
+
+    .setup {
+      margin-top: 1.6rem;
+      padding-top: 1.2rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.14);
+    }
+
+    .setup p {
+      margin: 0.35rem 0 0;
+      font-size: clamp(1rem, 2.6vw, 1.3rem);
+    }
+
+    .setup b {
+      color: #f5f7fb;
+      font-family: ui-monospace, Menlo, monospace;
+    }
   </style>
 </head>
 <body>
@@ -402,16 +418,32 @@ write_file 0644 "$ROOTFS/usr/local/share/gambit/kiosk-splash/index.html" <<'EOF'
     <h1>Starting Gambit</h1>
     <p id="status">Starting local services...</p>
     <div class="bar" aria-hidden="true"></div>
+    <div class="setup" id="setup" hidden>
+      <p>Or, from a phone or laptop:</p>
+      <p>Join the Wi-Fi <b id="setup-ssid"></b><span id="setup-password-line">, password <b id="setup-password"></b></span></p>
+      <p>Then open <b id="setup-address"></b></p>
+    </div>
   </main>
   <script>
     const target = new URLSearchParams(window.location.search).get("target") || "http://127.0.0.1:8765/kiosk/help";
     const status = document.getElementById("status");
+    const setup = document.getElementById("setup");
+
+    function showSetup(network) {
+      setup.hidden = !network;
+      if (!network) return;
+      document.getElementById("setup-ssid").textContent = network.ssid;
+      document.getElementById("setup-password").textContent = network.password;
+      document.getElementById("setup-password-line").hidden = !network.password;
+      document.getElementById("setup-address").textContent = network.address;
+    }
 
     async function checkReady() {
       try {
         const response = await fetch(`/state?target=${encodeURIComponent(target)}`, { cache: "no-store" });
         const state = await response.json();
         status.textContent = state.message || "Starting Gambit services...";
+        showSetup(state.setup);
         if (state.ready) {
           window.location.replace(target);
           return;
@@ -428,136 +460,7 @@ write_file 0644 "$ROOTFS/usr/local/share/gambit/kiosk-splash/index.html" <<'EOF'
 </html>
 EOF
 
-write_file 0755 "$ROOTFS/usr/local/bin/gambit-kiosk-splash-server" <<'EOF'
-#!/usr/bin/env python3
-import argparse
-import json
-import os
-import subprocess
-import urllib.error
-import urllib.request
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
-
-
-def target_ready(url: str) -> bool:
-    try:
-        with urllib.request.urlopen(url, timeout=0.7):
-            return True
-    except (OSError, urllib.error.URLError):
-        return False
-
-
-def command_output(args: list[str], timeout: float = 1.0) -> str:
-    try:
-        return subprocess.run(
-            args,
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=timeout,
-        ).stdout
-    except (OSError, subprocess.TimeoutExpired):
-        return ""
-
-
-def viam_agent_active() -> bool:
-    return command_output(["systemctl", "is-active", "viam-agent.service"]).strip() == "active"
-
-
-def network_online() -> bool:
-    return bool(command_output(["ip", "route", "show", "default"]).strip())
-
-
-def viam_agent_logs() -> str:
-    return command_output(
-        ["journalctl", "-u", "viam-agent.service", "-n", "120", "--no-pager"],
-        timeout=1.5,
-    )
-
-
-def package_count() -> int:
-    package_root = "/root/.viam/packages/data"
-    try:
-        return len([name for name in os.listdir(package_root) if not name.startswith(".")])
-    except OSError:
-        return 0
-
-
-def provisioning_state(target: str) -> dict[str, object]:
-    if target_ready(target):
-        return {"ready": True, "message": "Opening Gambit..."}
-
-    if not os.path.exists("/etc/viam.json"):
-        return {
-            "ready": False,
-            "message": "Open the Gambit app and connect with Bluetooth to finish setup.",
-        }
-
-    if not viam_agent_active():
-        return {"ready": False, "message": "Starting Viam services..."}
-
-    if not network_online():
-        return {
-            "ready": False,
-            "message": "Waiting for Wi-Fi. Finish network setup in the Gambit app.",
-        }
-
-    logs = viam_agent_logs()
-    installing = (
-        "Collecting " in logs
-        or "Installing collected packages" in logs
-        or "Using cached " in logs
-        or "Successfully installed" in logs
-        or "modmanager" in logs
-    )
-    if installing or package_count() > 0:
-        return {
-            "ready": False,
-            "message": "Configuring your robot. Downloading modules and dependencies...",
-        }
-
-    return {
-        "ready": False,
-        "message": "Configuring your robot. This can take a few minutes after Wi-Fi setup.",
-    }
-
-
-class Handler(SimpleHTTPRequestHandler):
-    def end_headers(self) -> None:
-        self.send_header("Cache-Control", "no-store")
-        super().end_headers()
-
-    def do_GET(self) -> None:
-        parsed = urlparse(self.path)
-        if parsed.path == "/state":
-            target = parse_qs(parsed.query).get("target", [os.environ.get("KIOSK_URL", "")])[0]
-            body = json.dumps(provisioning_state(target)).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-        return super().do_GET()
-
-    def log_message(self, fmt: str, *args: object) -> None:
-        return
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=8764)
-    args = parser.parse_args()
-    os.chdir(os.environ.get("SPLASH_DIR", "/usr/local/share/gambit/kiosk-splash"))
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    server.serve_forever()
-
-
-if __name__ == "__main__":
-    main()
-EOF
+install_file 0755 "$REPO_DIR/image/gambit-kiosk-splash-server" "$ROOTFS/usr/local/bin/gambit-kiosk-splash-server"
 
 write_file 0755 "$ROOTFS/usr/local/bin/gambit-ble-diag" <<'EOF'
 #!/usr/bin/env bash
