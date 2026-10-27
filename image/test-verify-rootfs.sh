@@ -368,7 +368,7 @@ fi
 echo "verify-rootfs tests passed."
 
 # gambit-setup-name (GMBT-1471), against a unit's fake root with the image's
-# viam-defaults.json. UR-12's serial.
+# viam-defaults.json. UR-12's serial; sha256 of it starts 6c22e875.
 unit="$tmp/unit"
 mkdir -p "$unit/etc" "$unit/proc/device-tree"
 cp "$SCRIPT_DIR/viam-defaults.user-testing.json" "$unit/etc/viam-defaults.json"
@@ -376,9 +376,9 @@ printf '1F5762CBE17D0CA4\0' > "$unit/proc/device-tree/serial-number"
 setup_name() { GAMBIT_ROOT="$unit" "$SCRIPT_DIR/gambit-setup-name" 2>/dev/null; }
 
 setup_name
-want="$(jq '.network_configuration.hotspot_ssid = "gambit-setup-1f5762cbe17d0ca4"' "$SCRIPT_DIR/viam-defaults.user-testing.json")"
+want="$(jq '.network_configuration.hotspot_ssid = "gambit-setup-6c22e875"' "$SCRIPT_DIR/viam-defaults.user-testing.json")"
 if [[ "$(jq . "$unit/etc/viam-defaults.json")" != "$want" ]]; then
-    echo "expected the setup name gambit-setup-1f5762cbe17d0ca4 and the rest of viam-defaults.json as it was" >&2
+    echo "expected the setup name gambit-setup-6c22e875 and the rest of viam-defaults.json as it was" >&2
     exit 1
 fi
 before="$(ls -li "$unit/etc/viam-defaults.json")"

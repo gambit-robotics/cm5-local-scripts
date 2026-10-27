@@ -1,8 +1,9 @@
 #!/bin/sh
 # GMBT-1471: viam-agent names its setup hotspot and Bluetooth device
 # network_configuration.hotspot_ssid, or else <hotspot_prefix>-<hostname>, and
-# hostnames aren't unique. This names them after the unit's CPU serial, which
-# is burned into the chip: gambit-setup-<serial>. It runs at every boot,
+# hostnames aren't unique. This names them gambit-setup-<id>, where <id> is the
+# first 8 hex digits of sha256(CPU serial): the serial is burned into the
+# chip, and the setup QR code carries the same <id>. It runs at every boot,
 # before viam-agent, and leaves the hostname alone.
 set -eu
 
@@ -17,9 +18,8 @@ case "$serial" in
         ;;
 esac
 
-named="$(jq --arg serial "$serial" \
-    '.network_configuration.hotspot_ssid = "\(.network_configuration.hotspot_prefix // "gambit-setup")-\($serial)"' \
-    "$defaults")"
+id="$(printf '%s' "$serial" | sha256sum | cut -c1-8)"
+named="$(jq --arg ssid "gambit-setup-$id" '.network_configuration.hotspot_ssid = $ssid' "$defaults")"
 if [ "$named" != "$(jq . "$defaults")" ]; then
     printf '%s\n' "$named" > "$defaults.tmp"
     mv "$defaults.tmp" "$defaults"
