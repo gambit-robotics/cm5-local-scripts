@@ -111,6 +111,10 @@ else
     fi
 fi
 
+if [[ ! -x "$ROOTFS/usr/bin/qrencode" ]]; then
+    fail "missing qrencode; the kiosk splash can't draw the setup QR code"
+fi
+
 ble_diag="$ROOTFS/usr/local/bin/gambit-ble-diag"
 if [[ ! -x "$ble_diag" ]]; then
     fail "missing executable BLE provisioning diagnostic"

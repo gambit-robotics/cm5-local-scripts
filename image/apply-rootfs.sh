@@ -353,6 +353,12 @@ write_file 0644 "$ROOTFS/usr/local/share/gambit/kiosk-splash/index.html" <<'EOF'
     }
 
     main {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+    }
+
+    .text {
       width: min(86vw, 560px);
       text-align: center;
     }
@@ -411,27 +417,59 @@ write_file 0644 "$ROOTFS/usr/local/share/gambit/kiosk-splash/index.html" <<'EOF'
       color: #f5f7fb;
       font-family: ui-monospace, Menlo, monospace;
     }
+
+    .qr {
+      width: 160px;
+      margin: 0;
+      text-align: center;
+    }
+
+    .qr img {
+      display: block;
+      width: 160px;
+      height: 160px;
+      border-radius: 12px;
+    }
+
+    .qr figcaption {
+      margin-top: 0.6rem;
+      color: #c6cedc;
+      font-size: 1rem;
+      line-height: 1.3;
+    }
   </style>
 </head>
 <body>
   <main>
-    <h1>Starting Gambit</h1>
-    <p id="status">Starting local services...</p>
-    <div class="bar" aria-hidden="true"></div>
-    <div class="setup" id="setup" hidden>
-      <p>Or, from a phone or laptop:</p>
-      <p>Join the Wi-Fi <b id="setup-ssid"></b><span id="setup-password-line">, password <b id="setup-password"></b></span></p>
-      <p>Then open <b id="setup-address"></b></p>
+    <div class="text">
+      <h1>Starting Gambit</h1>
+      <p id="status">Starting local services...</p>
+      <div class="bar" aria-hidden="true"></div>
+      <div class="setup" id="setup" hidden>
+        <p>Or, from a phone or laptop:</p>
+        <p>Join the Wi-Fi <b id="setup-ssid"></b><span id="setup-password-line">, password <b id="setup-password"></b></span></p>
+        <p>Then open <b id="setup-address"></b></p>
+      </div>
     </div>
+    <figure class="qr" id="setup-qr" hidden>
+      <img alt="Setup QR code" onerror="this.parentElement.remove()">
+      <figcaption>Scan with your iPhone to set up this Gambit</figcaption>
+    </figure>
   </main>
   <script>
     const target = new URLSearchParams(window.location.search).get("target") || "http://127.0.0.1:8765/kiosk/help";
     const status = document.getElementById("status");
     const setup = document.getElementById("setup");
 
+    const qr = document.getElementById("setup-qr");
+
+    // The setup QR code (GMBT-1470) shows while the device is in setup mode,
+    // when the app can reach it over Bluetooth.
     function showSetup(network) {
       setup.hidden = !network;
+      qr.hidden = !network;
       if (!network) return;
+      qr.querySelector("img").src ||= "/setup-qr.svg";
       document.getElementById("setup-ssid").textContent = network.ssid;
       document.getElementById("setup-password").textContent = network.password;
       document.getElementById("setup-password-line").hidden = !network.password;
