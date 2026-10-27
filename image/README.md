@@ -17,7 +17,6 @@ keeps the first slice testable without a Linux loop-device builder while still
 moving the install scripts toward a repeatable image pipeline.
 
 ```bash
-export VIAM_KEY_ID=... VIAM_KEY_VALUE=...   # Gambit org API key
 sudo --preserve-env=VIAM_KEY_ID,VIAM_KEY_VALUE image/apply-rootfs.sh \
   --rootfs /mnt/gambit-root \
   --bootfs /mnt/gambit-boot \
@@ -80,8 +79,9 @@ should use short-lived signed URLs.
   `.status.json` viam-server writes after a download, listed in
   `/etc/gambit/viam-modules.txt`. viam-server finds them synced on first boot
   and downloads only modules whose version moved after the build.
-  `image/bake-viam-modules.sh` does this with the viam CLI, jq, and a Gambit
-  org API key in `VIAM_KEY_ID`/`VIAM_KEY_VALUE`. It leaves out the fragment's
+  `image/bake-viam-modules.sh` does this with the viam CLI and jq, logged in
+  with chef's release key in `VIAM_KEY_ID`/`VIAM_KEY_VALUE` when those are set
+  and otherwise with the builder's own `viam login`. It leaves out the fragment's
   `packages`: `gcloud-creds` holds a service account key, and the ml_model
   packages track `latest`, which viam-server never re-resolves, so a baked copy
   would pin every unit to the model of the build day. The modules' `first_run`

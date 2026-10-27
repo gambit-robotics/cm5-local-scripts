@@ -346,8 +346,11 @@ mkdir -p "$fake_bin"
 cat > "$fake_bin/viam" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+login="${VIAM_HOME:-/nonexistent}/fake-login"
 case "$1 ${2:-}" in
-    "login api-key"|"logout ") ;;
+    "login api-key") touch "$login" ;;
+    "logout ") rm -f "$login" ;;
+    "whoami ") [[ -n "${FAKE_VIAM_LOGIN:-}" || -f "$login" ]] ;;
     "fragment get")
         case "$4" in
             4af2846b-610d-4ec7-8193-cd195efa0679) echo '{"modules": [
@@ -386,6 +389,12 @@ bake_root="$tmp/bake"
 make_rootfs "$bake_root"
 PATH="$fake_bin:$PATH" VIAM_KEY_ID=test VIAM_KEY_VALUE=test "$SCRIPT_DIR/bake-viam-modules.sh" --rootfs "$bake_root" >/dev/null 2>&1
 "$VERIFY" --rootfs "$bake_root" >/dev/null
+# Without a key it uses the existing CLI login, and fails without one.
+PATH="$fake_bin:$PATH" FAKE_VIAM_LOGIN=1 "$SCRIPT_DIR/bake-viam-modules.sh" --rootfs "$bake_root" >/dev/null 2>&1
+if PATH="$fake_bin:$PATH" "$SCRIPT_DIR/bake-viam-modules.sh" --rootfs "$bake_root" >/dev/null 2>&1; then
+    echo "expected the bake to fail with no Viam login" >&2
+    exit 1
+fi
 for want in e76d1b3b-0468-4efd-bb7f-fb1d2b352fcb-csi-cam-pi-0_4_0-rc1-linux-arm64 \
     33604ab0-737c-4481-baa2-b526ccb00362-chef-0_5_3-rc158-linux-arm64 \
     c2ba7a2c-e229-484c-b99a-5873631f4ea8-viam-system-0_0_6-linux-arm64; do

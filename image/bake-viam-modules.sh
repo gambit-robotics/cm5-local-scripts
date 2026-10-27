@@ -14,8 +14,9 @@ viam-server keeps them, and lists them in /etc/gambit/viam-modules.txt. On
 first boot viam-server finds them synced and downloads only modules whose
 version moved after the build.
 
-Needs the viam CLI, jq, and a Gambit org API key (never a personal login) in
-VIAM_KEY_ID and VIAM_KEY_VALUE.
+Needs the viam CLI and jq. It logs in with VIAM_KEY_ID and VIAM_KEY_VALUE
+when they are set, and otherwise uses the existing viam CLI login (under sudo,
+the invoking user's).
 EOF
 }
 
@@ -30,7 +31,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$ROOTFS" ]] || die "--rootfs is required"
-[[ -n "${VIAM_KEY_ID:-}" && -n "${VIAM_KEY_VALUE:-}" ]] || die "VIAM_KEY_ID and VIAM_KEY_VALUE must hold a Gambit org API key"
 command -v viam >/dev/null || die "the viam CLI is required"
 command -v jq >/dev/null || die "jq is required"
 fragment="$(jq -r '.network_configuration.fragment_id // empty' "$ROOTFS/etc/viam-defaults.json")"
@@ -39,13 +39,21 @@ fragment="$(jq -r '.network_configuration.fragment_id // empty' "$ROOTFS/etc/via
 module_root="$ROOTFS/root/.viam/packages/data/module"
 manifest="$ROOTFS/etc/gambit/viam-modules.txt"
 
-# The CLI keeps its login under VIAM_HOME, so the API key never touches the
-# operator's own ~/.viam.
-cli_home="$(mktemp -d)"
 download_dir="$(mktemp -d)"
-trap 'VIAM_HOME="$cli_home" viam logout >/dev/null 2>&1 || true; rmdir "$cli_home" "$download_dir" 2>/dev/null || true' EXIT
-viam_cli() { VIAM_HOME="$cli_home" viam "$@" </dev/null; }
-viam_cli login api-key --key-id "$VIAM_KEY_ID" --key "$VIAM_KEY_VALUE" >/dev/null
+trap 'rmdir "$download_dir" 2>/dev/null || true' EXIT
+viam_cli() { viam "$@" </dev/null; }
+if [[ -n "${VIAM_KEY_ID:-}" && -n "${VIAM_KEY_VALUE:-}" ]]; then
+    # The CLI keeps its login under VIAM_HOME; a throwaway one leaves the
+    # builder's own login alone.
+    VIAM_HOME="$(mktemp -d)"
+    export VIAM_HOME
+    trap 'viam logout >/dev/null 2>&1 || true; rmdir "$VIAM_HOME" "$download_dir" 2>/dev/null || true' EXIT
+    viam_cli login api-key --key-id "$VIAM_KEY_ID" --key "$VIAM_KEY_VALUE" >/dev/null
+elif ! viam_cli whoami >/dev/null 2>&1 && [[ -n "${SUDO_USER:-}" ]]; then
+    VIAM_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)/.viam"
+    export VIAM_HOME
+fi
+viam_cli whoami >/dev/null 2>&1 || die "no Viam login: run 'viam login', or set VIAM_KEY_ID and VIAM_KEY_VALUE"
 
 # Prints "<module_id> <version>" for each registry module of a fragment and the
 # fragments it nests. Packages stay out: gcloud-creds holds a service account

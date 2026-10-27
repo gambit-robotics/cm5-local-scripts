@@ -26,8 +26,8 @@ This script writes runtime artifacts into a mounted Raspberry Pi OS rootfs. It
 does not mount images, install apt packages, or bake any per-device secret.
 The image must include Viam provisioning defaults, but must not include
 per-device /etc/viam.json cloud credentials. It bakes the provisioning
-fragment's Viam modules with image/bake-viam-modules.sh, which needs a Gambit
-org API key in VIAM_KEY_ID and VIAM_KEY_VALUE.
+fragment's Viam modules with image/bake-viam-modules.sh, which uses
+VIAM_KEY_ID/VIAM_KEY_VALUE if set and otherwise the viam CLI login.
 EOF
 }
 
