@@ -464,7 +464,7 @@ write_file 0644 "$ROOTFS/usr/local/share/gambit/kiosk-splash/index.html" <<'EOF'
     const qr = document.getElementById("setup-qr");
 
     // The setup QR code (GMBT-1470) shows while the device is in setup mode,
-    // when the app can reach it over Bluetooth.
+    // when the app can reach it over Bluetooth as gambit-setup-<id>.
     function showSetup(network) {
       setup.hidden = !network;
       qr.hidden = !network;
