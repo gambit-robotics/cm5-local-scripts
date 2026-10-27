@@ -1,0 +1,25 @@
+#!/bin/sh
+# GMBT-1470: the setup screen's options, from the machine's config. Core's
+# attributes hold them as "setup", e.g. {"show_qr_code": true}. The kiosk
+# splash runs as the kiosk user and can't read viam-server's cached config,
+# which is root's alone because it holds keys and secrets, so this copies just
+# that block to /run/gambit/setup.json, readable by all, at every boot before
+# the kiosk session starts. The cache outlives a factory reset, which deletes
+# only /etc/viam.json and the saved Wi-Fi, so a reset box keeps its options.
+# A box that was never set up has no cache and gets {}.
+set -eu
+
+ROOT="${GAMBIT_ROOT:-}" # a fake root, in tests
+out="$ROOT/run/gambit/setup.json"
+
+# The newest cached config is the box's latest machine.
+cached="$(ls -t "$ROOT"/root/.viam/cached_cloud_config_*.json 2>/dev/null | head -n 1 || true)"
+options='{}'
+if [ -n "$cached" ]; then
+    options="$(jq -c '[.components[]? | select(.name == "core") | .attributes.setup | objects][0] // {}' "$cached" 2>/dev/null || echo '{}')"
+fi
+
+mkdir -p "$(dirname "$out")"
+printf '%s\n' "$options" > "$out.tmp"
+chmod 0644 "$out.tmp"
+mv "$out.tmp" "$out"
