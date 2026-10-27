@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import os
 import socket
@@ -81,6 +82,34 @@ def setup_network(hostname: str) -> dict[str, str]:
     return {"ssid": ssid[:32], "password": str(conf["hotspot_password"]), "address": SETUP_ADDRESS}
 
 
+# The CPU serial, burned into the chip, identifies the box. Its setup hotspot
+# and Bluetooth device are gambit-setup-<id>, <id> being the first 8 hex digits
+# of sha256(serial) (GMBT-1471).
+CPU_SERIAL = "/proc/device-tree/serial-number"
+# Where the setup QR code points (GMBT-1470, chef's infra/setup): the Gambit
+# app opens it at Bluetooth pairing with gambit-setup-<id> chosen, and a phone
+# without the app gets TestFlight.
+SETUP_LINK = "https://gambit-setup.chef-workspace.workers.dev/setup?device="
+
+
+def setup_qr() -> bytes:
+    """This box's setup QR code, as SVG; empty without a serial or qrencode."""
+    try:
+        with open(CPU_SERIAL, "rb") as f:
+            serial = f.read().rstrip(b"\0\n").lower()
+        if not serial:
+            return b""
+        device = hashlib.sha256(serial).hexdigest()[:8]
+        return subprocess.run(
+            ["qrencode", "-t", "SVG", "-l", "M", "-o", "-", SETUP_LINK + device],
+            check=True,
+            capture_output=True,
+            timeout=2,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return b""
+
+
 def hotspot_up() -> bool:
     return f"inet {SETUP_ADDRESS}/" in command_output(["ip", "-4", "-o", "addr", "show"])
 
@@ -136,17 +165,23 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
+    def send(self, body: bytes, content_type: str) -> None:
+        if not body:
+            self.send_error(404)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/state":
             target = parse_qs(parsed.query).get("target", [os.environ.get("KIOSK_URL", "")])[0]
-            body = json.dumps(provisioning_state(target)).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
+            return self.send(json.dumps(provisioning_state(target)).encode("utf-8"), "application/json")
+        if parsed.path == "/setup-qr.svg":
+            return self.send(setup_qr(), "image/svg+xml")
         return super().do_GET()
 
     def log_message(self, fmt: str, *args: object) -> None:

@@ -66,6 +66,9 @@ EOF
 # Configuring your robot
 EOF
     chmod 0755 "$dir/usr/local/bin/gambit-kiosk-splash-server"
+    mkdir -p "$dir/usr/bin"
+    printf '#!/bin/sh\n' > "$dir/usr/bin/qrencode"
+    chmod 0755 "$dir/usr/bin/qrencode"
     cat > "$dir/usr/local/bin/gambit-ble-diag" <<'EOF'
 #!/usr/bin/env bash
 bluetoothctl show
@@ -350,6 +353,14 @@ export GOOGLE_API_KEY="AIzaSyCkfPOPZXDKNn8hhgu3JrA62wIgC93d44k"
 EOF
 if "$VERIFY" --rootfs "$chromium_key_root" >/dev/null 2>&1; then
     echo "expected chromium API key fixture to fail" >&2
+    exit 1
+fi
+
+no_qrencode_root="$tmp/no-qrencode"
+make_rootfs "$no_qrencode_root"
+rm "$no_qrencode_root/usr/bin/qrencode"
+if "$VERIFY" --rootfs "$no_qrencode_root" >/dev/null 2>&1; then
+    echo "expected missing qrencode fixture to fail" >&2
     exit 1
 fi
 

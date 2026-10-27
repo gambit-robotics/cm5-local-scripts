@@ -61,5 +61,35 @@ class SetupNetworkTest(unittest.TestCase):
                 self.assertNotIn("setup", server.provisioning_state(unreachable))
 
 
+class SetupQRTest(unittest.TestCase):
+    def serial(self, content: bytes) -> str:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = os.path.join(tmp.name, "serial-number")
+        with open(path, "wb") as f:
+            f.write(content)
+        patcher = mock.patch.object(server, "CPU_SERIAL", path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return path
+
+    def test_the_code_names_the_box_by_its_setup_id(self) -> None:
+        # UR-12's serial; sha256 of it starts 6c22e875, as gambit-setup-name has it.
+        self.serial(b"1F5762CBE17D0CA4\0")
+        drawn = mock.Mock(stdout=b"<svg/>")
+        with mock.patch.object(server.subprocess, "run", return_value=drawn) as run:
+            self.assertEqual(server.setup_qr(), b"<svg/>")
+        self.assertEqual(
+            run.call_args.args[0][-1],
+            "https://gambit-setup.chef-workspace.workers.dev/setup?device=6c22e875",
+        )
+
+    def test_without_a_serial_there_is_no_code(self) -> None:
+        os.remove(self.serial(b""))
+        with mock.patch.object(server.subprocess, "run") as run:
+            self.assertEqual(server.setup_qr(), b"")
+        run.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
