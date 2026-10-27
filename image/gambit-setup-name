@@ -1,0 +1,26 @@
+#!/bin/sh
+# GMBT-1471: viam-agent names its setup hotspot and Bluetooth device
+# network_configuration.hotspot_ssid, or else <hotspot_prefix>-<hostname>, and
+# hostnames aren't unique. This names them after the unit's CPU serial, which
+# is burned into the chip: gambit-setup-<serial>. It runs at every boot,
+# before viam-agent, and leaves the hostname alone.
+set -eu
+
+ROOT="${GAMBIT_ROOT:-}" # a fake root, in tests
+defaults="$ROOT/etc/viam-defaults.json"
+
+serial="$(tr -d '\000\n' 2>/dev/null < "$ROOT/proc/device-tree/serial-number" | tr 'A-F' 'a-f' || true)"
+case "$serial" in
+    "" | *[!0-9a-f]*)
+        echo "gambit-setup-name: no CPU serial; setup is named after the hostname" >&2
+        exit 0
+        ;;
+esac
+
+named="$(jq --arg serial "$serial" \
+    '.network_configuration.hotspot_ssid = "\(.network_configuration.hotspot_prefix // "gambit-setup")-\($serial)"' \
+    "$defaults")"
+if [ "$named" != "$(jq . "$defaults")" ]; then
+    printf '%s\n' "$named" > "$defaults.tmp"
+    mv "$defaults.tmp" "$defaults"
+fi

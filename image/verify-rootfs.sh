@@ -262,6 +262,13 @@ else
     fi
 fi
 
+setup_name_service="$ROOTFS/etc/systemd/system/gambit-setup-name.service"
+if [[ ! -x "$ROOTFS/usr/local/sbin/gambit-setup-name" ]] ||
+    ! grep -Fq 'Before=viam-agent.service' "$setup_name_service" 2>/dev/null ||
+    [[ ! -L "$ROOTFS/etc/systemd/system/multi-user.target.wants/gambit-setup-name.service" ]]; then
+    fail "setup is not named after the CPU serial before viam-agent starts"
+fi
+
 if [[ -d "$ROOTFS/etc/gambit/identity" ]]; then
     while IFS= read -r path; do
         fail "device identity material is baked: ${path#$ROOTFS/}"

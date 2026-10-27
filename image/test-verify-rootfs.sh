@@ -36,6 +36,10 @@ Description=Gambit boot chime
 WantedBy=sysinit.target
 EOF
     ln -sfn ../gambit-boot-chime.service "$dir/etc/systemd/system/sysinit.target.wants/gambit-boot-chime.service"
+    printf '#!/bin/sh\n' > "$dir/usr/local/sbin/gambit-setup-name"
+    chmod 0755 "$dir/usr/local/sbin/gambit-setup-name"
+    printf '[Unit]\nBefore=viam-agent.service\n' > "$dir/etc/systemd/system/gambit-setup-name.service"
+    ln -sfn ../gambit-setup-name.service "$dir/etc/systemd/system/multi-user.target.wants/gambit-setup-name.service"
     cat > "$dir/etc/plymouth/plymouthd.conf" <<'EOF'
 [Daemon]
 Theme=gambit
@@ -353,4 +357,43 @@ if "$VERIFY" --rootfs "$chromium_key_root" >/dev/null 2>&1; then
     exit 1
 fi
 
+setup_name_off_root="$tmp/setup-name-off"
+make_rootfs "$setup_name_off_root"
+rm -f "$setup_name_off_root/etc/systemd/system/multi-user.target.wants/gambit-setup-name.service"
+if "$VERIFY" --rootfs "$setup_name_off_root" >/dev/null 2>&1; then
+    echo "expected disabled gambit-setup-name.service fixture to fail" >&2
+    exit 1
+fi
+
 echo "verify-rootfs tests passed."
+
+# gambit-setup-name (GMBT-1471), against a unit's fake root with the image's
+# viam-defaults.json. UR-12's serial.
+unit="$tmp/unit"
+mkdir -p "$unit/etc" "$unit/proc/device-tree"
+cp "$SCRIPT_DIR/viam-defaults.user-testing.json" "$unit/etc/viam-defaults.json"
+printf '1F5762CBE17D0CA4\0' > "$unit/proc/device-tree/serial-number"
+setup_name() { GAMBIT_ROOT="$unit" "$SCRIPT_DIR/gambit-setup-name" 2>/dev/null; }
+
+setup_name
+want="$(jq '.network_configuration.hotspot_ssid = "gambit-setup-1f5762cbe17d0ca4"' "$SCRIPT_DIR/viam-defaults.user-testing.json")"
+if [[ "$(jq . "$unit/etc/viam-defaults.json")" != "$want" ]]; then
+    echo "expected the setup name gambit-setup-1f5762cbe17d0ca4 and the rest of viam-defaults.json as it was" >&2
+    exit 1
+fi
+before="$(ls -li "$unit/etc/viam-defaults.json")"
+setup_name # every boot after: nothing changes
+if [[ "$(ls -li "$unit/etc/viam-defaults.json")" != "$before" ]]; then
+    echo "expected a second boot to leave viam-defaults.json alone" >&2
+    exit 1
+fi
+
+rm "$unit/proc/device-tree/serial-number"
+cp "$SCRIPT_DIR/viam-defaults.user-testing.json" "$unit/etc/viam-defaults.json"
+setup_name
+if ! cmp -s "$SCRIPT_DIR/viam-defaults.user-testing.json" "$unit/etc/viam-defaults.json"; then
+    echo "expected a unit without a serial to keep viam-agent's own setup name" >&2
+    exit 1
+fi
+
+echo "gambit-setup-name tests passed."
