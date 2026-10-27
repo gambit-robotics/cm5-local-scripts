@@ -31,6 +31,7 @@ help:
 	@echo ""
 	@echo "Image tooling:"
 	@echo "  make image-apply ROOTFS=/mnt/root BOOTFS=/mnt/boot IMAGE_VERSION=0.1.0-dev VIAM_DEFAULTS=image/viam-defaults.user-testing.json"
+	@echo "    (downloads Viam modules with VIAM_KEY_ID/VIAM_KEY_VALUE if set, else your viam CLI login)"
 	@echo "  make image-verify ROOTFS=/mnt/root"
 	@echo "  make image-test"
 	@echo "  make image-publish-r2 RELEASE=2026-06-03-assembler-rc1 ARTIFACT=dist/gambit.img.xz"
@@ -134,7 +135,7 @@ endif
 ifeq ($(VIAM_DEFAULTS),)
 	$(error VIAM_DEFAULTS is required)
 endif
-	sudo image/apply-rootfs.sh --rootfs "$(ROOTFS)" --bootfs "$(BOOTFS)" --image-version "$(IMAGE_VERSION)" --viam-defaults "$(VIAM_DEFAULTS)"
+	sudo --preserve-env=VIAM_KEY_ID,VIAM_KEY_VALUE image/apply-rootfs.sh --rootfs "$(ROOTFS)" --bootfs "$(BOOTFS)" --image-version "$(IMAGE_VERSION)" --viam-defaults "$(VIAM_DEFAULTS)"
 
 image-verify:
 ifeq ($(ROOTFS),)

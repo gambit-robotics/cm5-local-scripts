@@ -17,7 +17,7 @@ keeps the first slice testable without a Linux loop-device builder while still
 moving the install scripts toward a repeatable image pipeline.
 
 ```bash
-sudo image/apply-rootfs.sh \
+sudo --preserve-env=VIAM_KEY_ID,VIAM_KEY_VALUE image/apply-rootfs.sh \
   --rootfs /mnt/gambit-root \
   --bootfs /mnt/gambit-boot \
   --image-version 0.1.0-dev \
@@ -74,6 +74,19 @@ should use short-lived signed URLs.
 - Plymouth assets/theme files
 - `/etc/viam-defaults.json` for Viam BLE provisioning in the User Testing
   location; the image must not contain per-device `/etc/viam.json`
+- the registry modules of that file's provisioning fragment (and the fragments
+  it nests), for linux/arm64, under `/root/.viam/packages/data/module` with the
+  `.status.json` viam-server writes after a download, listed in
+  `/etc/gambit/viam-modules.txt`. viam-server finds them synced on first boot
+  and downloads only modules whose version moved after the build.
+  `image/bake-viam-modules.sh` does this with the viam CLI and jq, logged in
+  with chef's release key in `VIAM_KEY_ID`/`VIAM_KEY_VALUE` when those are set
+  and otherwise with the builder's own `viam login`. It leaves out the fragment's
+  `packages`: `gcloud-creds` holds a service account key, and the ml_model
+  packages track `latest`, which viam-server never re-resolves, so a baked copy
+  would pin every unit to the model of the build day. The modules' `first_run`
+  scripts still run on first boot; the apt packages they install are in
+  `packages.txt`.
 - image metadata at `/etc/gambit/image-build.json`
 
 ## R2 Release Contents
