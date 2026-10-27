@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import os
 import socket
@@ -7,7 +8,7 @@ import subprocess
 import urllib.error
 import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, urlparse
 
 
 def target_ready(url: str) -> bool:
@@ -81,29 +82,31 @@ def setup_network(hostname: str) -> dict[str, str]:
     return {"ssid": ssid[:32], "password": str(conf["hotspot_password"]), "address": SETUP_ADDRESS}
 
 
-# The CPU serial, burned into the chip, identifies the box; its setup hotspot
-# and Bluetooth device are gambit-setup-<serial> (GMBT-1471).
+# The CPU serial, burned into the chip, identifies the box. Its setup hotspot
+# and Bluetooth device are gambit-setup-<id>, <id> being the first 8 hex digits
+# of sha256(serial) (GMBT-1471).
 CPU_SERIAL = "/proc/device-tree/serial-number"
 # Where the setup QR code points (GMBT-1470, chef's infra/setup): the Gambit
-# app opens it at Bluetooth pairing with this box chosen, and a phone without
-# the app gets TestFlight.
-SETUP_LINK = "https://gambit-setup.chef-workspace.workers.dev/setup?serial="
+# app opens it at Bluetooth pairing with gambit-setup-<id> chosen, and a phone
+# without the app gets TestFlight.
+SETUP_LINK = "https://gambit-setup.chef-workspace.workers.dev/setup?device="
 
 
 def setup_qr() -> bytes:
     """This box's setup QR code, as SVG; empty without a serial or qrencode."""
     try:
         with open(CPU_SERIAL, "rb") as f:
-            serial = f.read().rstrip(b"\0\n").decode("ascii").lower()
+            serial = f.read().rstrip(b"\0\n").lower()
         if not serial:
             return b""
+        device = hashlib.sha256(serial).hexdigest()[:8]
         return subprocess.run(
-            ["qrencode", "-t", "SVG", "-l", "M", "-o", "-", SETUP_LINK + quote(serial)],
+            ["qrencode", "-t", "SVG", "-l", "M", "-o", "-", SETUP_LINK + device],
             check=True,
             capture_output=True,
             timeout=2,
         ).stdout
-    except (OSError, UnicodeDecodeError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError):
         return b""
 
 
