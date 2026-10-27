@@ -25,7 +25,9 @@ Options:
 This script writes runtime artifacts into a mounted Raspberry Pi OS rootfs. It
 does not mount images, install apt packages, or bake any per-device secret.
 The image must include Viam provisioning defaults, but must not include
-per-device /etc/viam.json cloud credentials.
+per-device /etc/viam.json cloud credentials. It bakes the provisioning
+fragment's Viam modules with image/bake-viam-modules.sh, which needs a Gambit
+org API key in VIAM_KEY_ID and VIAM_KEY_VALUE.
 EOF
 }
 
@@ -1048,6 +1050,7 @@ awk '/^# Plymouth theme script/{flag=1} flag{print}' "$REPO_DIR/plymouth/setup-b
 chmod 0644 "$plymouth_dir/gambit.script"
 
 install_file 0644 "$VIAM_DEFAULTS" "$ROOTFS/etc/viam-defaults.json"
+"$SCRIPT_DIR/bake-viam-modules.sh" --rootfs "$ROOTFS"
 
 write_file 0644 "$ROOTFS/etc/gambit/image-build.json" <<EOF
 {

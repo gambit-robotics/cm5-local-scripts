@@ -8,7 +8,8 @@ usage() {
     cat <<'EOF'
 Usage: image/verify-rootfs.sh --rootfs PATH [--bootfs PATH]
 
-Checks a mounted rootfs for the no-secrets and BLE provisioning image contract.
+Checks a mounted rootfs for the no-secrets, BLE provisioning and baked Viam
+modules image contract.
 EOF
 }
 
@@ -262,6 +263,23 @@ else
     fi
 fi
 
+# Modules baked by bake-viam-modules.sh. viam-server downloads a module again
+# unless <dir>.status.json names the same package and version as done.
+viam_modules="$ROOTFS/etc/gambit/viam-modules.txt"
+if ! grep -q '^[^#]' "$viam_modules" 2>/dev/null; then
+    fail "no baked Viam modules in etc/gambit/viam-modules.txt; first boot would download them all"
+fi
+while read -r package_id version; do
+    dir="$ROOTFS/root/.viam/packages/data/module/${package_id//\//-}-${version//./_}"
+    if [[ -z "$(ls -A "$dir" 2>/dev/null)" ]]; then
+        fail "baked Viam module is missing: $package_id $version"
+    elif ! grep -Fq "\"package_id\": \"$package_id\"" "$dir.status.json" 2>/dev/null ||
+        ! grep -Fq "\"version\": \"$version\"" "$dir.status.json" ||
+        ! grep -Fq '"sync_status": "done"' "$dir.status.json"; then
+        fail "baked Viam module $package_id $version has no matching done status file; first boot would download it again"
+    fi
+done < <(grep '^[^#]' "$viam_modules" 2>/dev/null || true)
+
 if [[ -d "$ROOTFS/etc/gambit/identity" ]]; then
     while IFS= read -r path; do
         fail "device identity material is baked: ${path#$ROOTFS/}"
@@ -277,7 +295,7 @@ while IFS= read -r path; do
     if grep -Iq . "$path" && grep -Eq 'BEGIN PRIVATE KEY|BEGIN RSA PRIVATE KEY|BEGIN EC PRIVATE KEY|BEGIN OPENSSH PRIVATE KEY|PRIVATE KEY-----' "$path"; then
         fail "private key PEM content is baked: ${path#$ROOTFS/}"
     fi
-done < <(find "$ROOTFS/etc" "$ROOTFS/usr/local" "$ROOTFS/var/lib/gambit" -type f 2>/dev/null || true)
+done < <(find "$ROOTFS/etc" "$ROOTFS/usr/local" "$ROOTFS/var/lib/gambit" "$ROOTFS/root/.viam" -type f 2>/dev/null || true)
 
 while IFS= read -r path; do
     fail "cm5-local-scripts repo material is baked: ${path#$ROOTFS/}"

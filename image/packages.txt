@@ -29,3 +29,14 @@ sqlite3
 swaybg
 wlr-randr
 wlrctl
+
+# Installed by the baked Viam modules' first_run or setup scripts on first boot
+# (csi-cam-pi, conversation-bundle, motion-detector, mlx90640-thermal-sensor);
+# baked so those scripts find them in place.
+gstreamer1.0-libcamera
+gstreamer1.0-plugins-base
+gstreamer1.0-plugins-good
+libgl1
+libgstreamer1.0-0
+libnlopt-dev
+python3-lgpio
