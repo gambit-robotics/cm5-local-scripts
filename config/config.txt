@@ -57,6 +57,8 @@ otg_mode=1
 
 [cm5]
 dtoverlay=dwc2,dr_mode=host
+# CM5 firmware leaves the fan off; a Pi 5 turns it on itself.
+dtparam=cooling_fan=on
 
 [all]
 dtparam=uart0=on
