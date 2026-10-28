@@ -405,7 +405,10 @@ chromium \
     --kiosk \
     --incognito \
     --user-data-dir=/tmp/chromium-kiosk \
-    --disable-features=TranslateUI \
+    --disable-features=TranslateUI,SpareRendererForSitePerProcess \
+    --enable-features=NetworkServiceInProcess2 \
+    --renderer-process-limit=1 \
+    --disable-component-update \
     --disable-component-extensions-with-background-pages \
     --disable-background-timer-throttling \
     --disable-renderer-backgrounding \
