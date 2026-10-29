@@ -478,6 +478,9 @@ Environment=XCURSOR_SIZE=1
 ExecStart=$KIOSK_SCRIPT
 Restart=always
 RestartSec=5
+# Out of memory, the kernel kills the kiosk (which restarts at the splash)
+# before chef or viam-server.
+OOMScoreAdjust=500
 StandardOutput=journal
 StandardError=journal
 
