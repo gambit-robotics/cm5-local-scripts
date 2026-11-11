@@ -24,6 +24,8 @@ make_rootfs() {
         "$dir/usr/share/wayland-sessions" \
         "$dir/var/lib/gambit"
     touch "$dir/usr/include/python3.13/Python.h"
+    mkdir -p "$dir/usr/sbin" && install -m 0755 /dev/null "$dir/usr/sbin/chronyd"
+    "$SCRIPT_DIR/../timesync/setup-timesync.sh" --rootfs "$dir"
     echo i2c-dev > "$dir/etc/modules-load.d/gambit-i2c.conf"
     cat > "$dir/etc/udev/rules.d/90-gambit-touchscreen-calibration.rules" <<'EOF'
 ACTION=="add|change", KERNEL=="event*", ENV{ID_INPUT_TOUCHSCREEN}=="1", ENV{LIBINPUT_CALIBRATION_MATRIX}="-1 0 1 0 -1 1"
@@ -294,6 +296,22 @@ sed -i.bak '/wlr-randr/d' "$missing_rotation_root/etc/xdg/labwc/autostart"
 rm -f "$missing_rotation_root/etc/xdg/labwc/autostart.bak"
 if "$VERIFY" --rootfs "$missing_rotation_root" >/dev/null 2>&1; then
     echo "expected missing DSI-2 transform fixture to fail" >&2
+    exit 1
+fi
+
+missing_chrony_root="$tmp/missing-chrony"
+make_rootfs "$missing_chrony_root"
+rm -f "$missing_chrony_root/etc/systemd/system/timers.target.wants/gambit-clock-save.timer"
+if "$VERIFY" --rootfs "$missing_chrony_root" >/dev/null 2>&1; then
+    echo "expected missing clock-save timer fixture to fail" >&2
+    exit 1
+fi
+
+missing_clock_wait_root="$tmp/missing-clock-wait"
+make_rootfs "$missing_clock_wait_root"
+rm -f "$missing_clock_wait_root/etc/systemd/system/viam-agent.service.d/gambit-wait-clock.conf"
+if "$VERIFY" --rootfs "$missing_clock_wait_root" >/dev/null 2>&1; then
+    echo "expected missing gambit-wait-clock drop-in fixture to fail" >&2
     exit 1
 fi
 

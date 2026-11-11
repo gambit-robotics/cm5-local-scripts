@@ -259,6 +259,8 @@ WantedBy=multi-user.target
 EOF
 enable_system_unit gambit-agent-activate.service
 
+"$REPO_DIR/timesync/setup-timesync.sh" --rootfs "$ROOTFS"
+
 install_file 0755 "$REPO_DIR/lowpower/dim.sh" "$ROOTFS/usr/local/bin/gambit-dim"
 install_file 0755 "$REPO_DIR/lowpower/gambit-input-idle.sh" \
     "$ROOTFS/usr/local/bin/gambit-input-idle"

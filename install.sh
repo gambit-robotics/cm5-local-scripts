@@ -15,6 +15,7 @@ INSTALL_KIOSK=false
 INSTALL_PLYMOUTH=false
 INSTALL_AUDIO=false
 INSTALL_LOWPOWER=false
+INSTALL_TIMESYNC=false
 KIOSK_TYPE=""  # "wayland" or "" (auto-detect)
 
 # User module arguments
@@ -38,6 +39,7 @@ Modules:
   --audio           Install boot chime (plays on early boot)
   --lowpower        Install low-power config (CPU governor + gpu_mem +
                     optional per-user screen dim if <username> supplied)
+  --timesync        Install chrony and save the time for the next boot
   --all             Install all modules (including config)
 
 Arguments (required for user-level modules):
@@ -68,7 +70,8 @@ while [[ $# -gt 0 ]]; do
         --plymouth) INSTALL_PLYMOUTH=true; shift ;;
         --audio) INSTALL_AUDIO=true; shift ;;
         --lowpower) INSTALL_LOWPOWER=true; shift ;;
-        --all) INSTALL_CONFIG=true; INSTALL_BUTTONS=true; INSTALL_KIOSK=true; INSTALL_PLYMOUTH=true; INSTALL_AUDIO=true; INSTALL_LOWPOWER=true; shift ;;
+        --timesync) INSTALL_TIMESYNC=true; shift ;;
+        --all) INSTALL_CONFIG=true; INSTALL_BUTTONS=true; INSTALL_KIOSK=true; INSTALL_PLYMOUTH=true; INSTALL_AUDIO=true; INSTALL_LOWPOWER=true; INSTALL_TIMESYNC=true; shift ;;
         -*)
             die "Unknown option: $1. Use --help for usage."
             ;;
@@ -232,6 +235,7 @@ $INSTALL_KIOSK && install_kiosk
 $INSTALL_PLYMOUTH && install_plymouth
 $INSTALL_AUDIO && install_audio
 $INSTALL_LOWPOWER && install_lowpower
+$INSTALL_TIMESYNC && "$SCRIPT_DIR/timesync/setup-timesync.sh"
 
 # ------------------------------------------------------------------------------
 # Summary
