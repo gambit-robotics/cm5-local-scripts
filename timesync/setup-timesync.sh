@@ -47,12 +47,17 @@ put() { # put <mode> <path>: write stdin to ROOT/path if it differs
 
 put 0644 /etc/chrony/conf.d/gambit.conf <<'CONF'
 # Gambit (GMBT-1615): set the clock about half a second after the network comes up.
-# Cloudflare's anycast time servers by address: a boot that starts without a network
-# needs no DNS. minpoll -1 sends iburst's first requests 0.5 s apart instead of 2 s
-# (faster gains nothing); chrony backs off toward maxpoll once the clock is stable.
-# Debian's pool, by name, stays as the fallback.
+# Cloudflare's anycast time servers: the nearest Cloudflare location answers.
+# - By IPv4 address, so a boot that starts without a network needs no DNS.
+# - By name too: on a network with IPv6 the name resolves to Cloudflare's IPv6 address, and it
+#   follows Cloudflare if the addresses change. On IPv4 it resolves to an address above and
+#   adds nothing. Literal IPv6 addresses would cost ~0.8 s on IPv4-only networks: chrony
+#   holds the first clock update until every source on the same schedule has 3 samples.
+# minpoll -1 sends iburst's first requests 0.5 s apart instead of 2 s (faster gains nothing);
+# chrony backs off toward maxpoll once the clock is stable. Debian's pool is the fallback.
 server 162.159.200.1 iburst minpoll -1 maxpoll 10
 server 162.159.200.123 iburst minpoll -1 maxpoll 10
+server time.cloudflare.com iburst minpoll -1 maxpoll 10
 # Step any offset over 0.1 s, not only in the first 3 updates (Debian's default is 1 s, 3).
 makestep 0.1 -1
 CONF
