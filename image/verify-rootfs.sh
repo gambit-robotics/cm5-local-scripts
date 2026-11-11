@@ -300,6 +300,17 @@ if [[ -n "$BOOTFS" ]]; then
     fi
 fi
 
+# GMBT-1615: chrony sets the clock ~1.6 s after the network is up; timesyncd took ~34 s.
+if [[ ! -x "$ROOTFS/usr/sbin/chronyd" ]]; then
+    fail "chrony is not installed"
+fi
+if [[ ! -f "$ROOTFS/etc/chrony/conf.d/gambit.conf" ]]; then
+    fail "missing /etc/chrony/conf.d/gambit.conf"
+fi
+if [[ ! -L "$ROOTFS/etc/systemd/system/timers.target.wants/gambit-clock-save.timer" ]]; then
+    fail "gambit-clock-save.timer is not enabled"
+fi
+
 secret_pattern='((^|[^[:alnum:]])(api[_-]?key|apikey)([^[:alnum:]]|$)|cloudflare[_-]?api|atlas|mongodb://|mongodb[+]srv://|elevenlabs|anthropic|openai|gemini|sk-[A-Za-z0-9_-]{20,}|password:[[:space:]]*[^[:space:]]+)'
 while IFS= read -r path; do
     case "${path#$ROOTFS/}" in

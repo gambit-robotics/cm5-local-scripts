@@ -7,6 +7,8 @@ alsa-utils
 brightnessctl
 build-essential
 chromium
+# Replaces systemd-timesyncd; configured by timesync/setup-timesync.sh (GMBT-1615).
+chrony
 curl
 i2c-tools
 jq
