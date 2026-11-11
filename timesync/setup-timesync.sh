@@ -9,6 +9,11 @@
 # sources online with the network, and iburst at minpoll -1 sets the clock ~1.6 s after the DHCP
 # lease. A timer keeps the clock file current for the next boot.
 #
+# gambit-wait-clock then holds viam-agent until the clock is set, so the data manager never
+# captures under the stale time, but only while something can set it: a box that is not set up
+# yet (no /etc/viam.json) or has no saved network in range starts viam-agent at once, because
+# its Bluetooth setup may be how the box gets a network.
+#
 # Usage: sudo ./setup-timesync.sh                 # this machine (installs chrony if missing)
 #        ./setup-timesync.sh --rootfs PATH        # a mounted image rootfs (chrony from packages.txt)
 #
@@ -70,6 +75,38 @@ AccuracySec=5s
 
 [Install]
 WantedBy=timers.target
+UNIT
+
+put 0755 /usr/local/sbin/gambit-wait-clock <<'GATE'
+#!/bin/sh
+# Hold viam-agent until the clock is set (GMBT-1615), but only while something can set it.
+say() { echo "gambit-wait-clock: $1 at $(cut -d' ' -f1 /proc/uptime) s"; exit 0; }
+[ -s /etc/viam.json ] || say "not set up yet, not waiting"
+command -v chronyc >/dev/null || say "no chrony, not waiting"
+synced() { chronyc -n tracking 2>/dev/null | grep -q '^Leap status *: Normal'; }
+i=0 online=""
+while [ "$i" -lt 100 ]; do
+    synced && say "clock set"
+    # NetworkManager's startup completes once it has brought up a saved network in range, or found none.
+    if [ -z "$online" ] && nm-online -s -q -t 0; then
+        case "$(nmcli -t -f STATE general 2>/dev/null)" in
+            connected*|connecting*) online=$i ;;
+            *) say "no network, not waiting" ;;
+        esac
+    fi
+    [ -n "$online" ] && [ $((i - online)) -ge 40 ] && say "clock still not set 10 s after the network came up"
+    sleep 0.25
+    i=$((i + 1))
+done
+say "network still not up after 25 s"
+GATE
+
+put 0644 /etc/systemd/system/viam-agent.service.d/gambit-wait-clock.conf <<'UNIT'
+[Unit]
+After=chrony.service NetworkManager.service
+
+[Service]
+ExecStartPre=-/usr/local/sbin/gambit-wait-clock
 UNIT
 
 if [[ -n "$ROOT" ]]; then

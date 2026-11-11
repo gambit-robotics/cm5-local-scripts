@@ -307,6 +307,14 @@ if "$VERIFY" --rootfs "$missing_chrony_root" >/dev/null 2>&1; then
     exit 1
 fi
 
+missing_clock_wait_root="$tmp/missing-clock-wait"
+make_rootfs "$missing_clock_wait_root"
+rm -f "$missing_clock_wait_root/etc/systemd/system/viam-agent.service.d/gambit-wait-clock.conf"
+if "$VERIFY" --rootfs "$missing_clock_wait_root" >/dev/null 2>&1; then
+    echo "expected missing gambit-wait-clock drop-in fixture to fail" >&2
+    exit 1
+fi
+
 missing_defaults_root="$tmp/missing-viam-defaults"
 make_rootfs "$missing_defaults_root"
 rm -f "$missing_defaults_root/etc/viam-defaults.json"

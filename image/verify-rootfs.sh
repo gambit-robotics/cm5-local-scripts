@@ -310,6 +310,10 @@ fi
 if [[ ! -L "$ROOTFS/etc/systemd/system/timers.target.wants/gambit-clock-save.timer" ]]; then
     fail "gambit-clock-save.timer is not enabled"
 fi
+if [[ ! -x "$ROOTFS/usr/local/sbin/gambit-wait-clock" ]] ||
+    ! grep -q gambit-wait-clock "$ROOTFS/etc/systemd/system/viam-agent.service.d/gambit-wait-clock.conf" 2>/dev/null; then
+    fail "viam-agent does not wait for the clock (gambit-wait-clock)"
+fi
 
 secret_pattern='((^|[^[:alnum:]])(api[_-]?key|apikey)([^[:alnum:]]|$)|cloudflare[_-]?api|atlas|mongodb://|mongodb[+]srv://|elevenlabs|anthropic|openai|gemini|sk-[A-Za-z0-9_-]{20,}|password:[[:space:]]*[^[:space:]]+)'
 while IFS= read -r path; do
