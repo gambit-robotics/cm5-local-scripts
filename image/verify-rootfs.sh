@@ -111,6 +111,17 @@ else
     fi
 fi
 
+setup_options_service="$ROOTFS/etc/systemd/system/gambit-setup-options.service"
+if [[ ! -x "$ROOTFS/usr/local/sbin/gambit-setup-options" ]] ||
+    ! grep -Fq 'Before=display-manager.service' "$setup_options_service" 2>/dev/null ||
+    [[ ! -L "$ROOTFS/etc/systemd/system/multi-user.target.wants/gambit-setup-options.service" ]]; then
+    fail "the setup screen's options are not copied from the machine's config before the kiosk starts"
+fi
+
+if [[ ! -x "$ROOTFS/usr/bin/qrencode" ]]; then
+    fail "missing qrencode; the kiosk splash can't draw the setup QR code"
+fi
+
 ble_diag="$ROOTFS/usr/local/bin/gambit-ble-diag"
 if [[ ! -x "$ble_diag" ]]; then
     fail "missing executable BLE provisioning diagnostic"

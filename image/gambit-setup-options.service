@@ -1,0 +1,11 @@
+[Unit]
+Description=Gambit: the setup screen's options, from the machine's cached config
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gambit-setup-options
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
