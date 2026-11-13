@@ -65,9 +65,6 @@ EOF
 # /etc/viam.json
 # journalctl
 # ["ip", "route", "show", "default"]
-# connect with Bluetooth to finish setup
-# Waiting for Wi-Fi
-# Configuring your robot
 EOF
     chmod 0755 "$dir/usr/local/bin/gambit-kiosk-splash-server"
     mkdir -p "$dir/usr/bin"

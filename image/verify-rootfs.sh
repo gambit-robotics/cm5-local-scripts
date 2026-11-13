@@ -100,15 +100,6 @@ else
     if ! grep -Fq '["ip", "route", "show", "default"]' "$splash_server"; then
         fail "local kiosk splash state server does not check network readiness before module downloads"
     fi
-    if ! grep -Fq 'connect with Bluetooth to finish setup' "$splash_server"; then
-        fail "local kiosk splash state server does not explain BLE setup wait"
-    fi
-    if ! grep -Fq 'Waiting for Wi-Fi' "$splash_server"; then
-        fail "local kiosk splash state server does not explain Wi-Fi wait before module downloads"
-    fi
-    if ! grep -Fq 'Configuring your robot' "$splash_server"; then
-        fail "local kiosk splash state server does not explain post-provisioning robot setup"
-    fi
 fi
 
 setup_options_service="$ROOTFS/etc/systemd/system/gambit-setup-options.service"

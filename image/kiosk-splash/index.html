@@ -10,6 +10,10 @@
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #1a1d23;
       color: #f5f7fb;
+      --secondary: #c6cedc;
+      --accent: #7ea4ff;
+      --accent-bg: rgba(126, 164, 255, 0.14);
+      --accent-border: rgba(126, 164, 255, 0.45);
     }
 
     * {
@@ -29,13 +33,12 @@
         #1a1d23;
     }
 
-    main {
-      display: flex;
-      align-items: center;
-      gap: 2rem;
+    [hidden] {
+      display: none !important;
     }
 
-    .text {
+    /* Starting: nothing for the cook to do. */
+    .starting {
       width: min(86vw, 560px);
       text-align: center;
     }
@@ -47,9 +50,9 @@
       letter-spacing: 0;
     }
 
-    p {
+    .starting p {
       margin: 1.2rem 0 0;
-      color: #c6cedc;
+      color: var(--secondary);
       font-size: clamp(1.15rem, 3vw, 1.55rem);
       line-height: 1.45;
     }
@@ -70,7 +73,7 @@
       inset: 0;
       width: 42%;
       border-radius: inherit;
-      background: #7ea4ff;
+      background: var(--accent);
       animation: loading 1.35s ease-in-out infinite;
     }
 
@@ -79,94 +82,210 @@
       100% { transform: translateX(240%); }
     }
 
+    /* Waiting for setup: the cook has to act, so it says what to do and
+       nothing on it moves. */
+    /* Sized to the steps and centred, so it sits right with or without the
+       QR code. */
     .setup {
-      margin-top: 1.6rem;
-      padding-top: 1.2rem;
-      border-top: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 0 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
-    .setup p {
-      margin: 0.35rem 0 0;
-      font-size: clamp(1rem, 2.6vw, 1.3rem);
+    .setup-steps {
+      display: grid;
+      grid-template-columns: auto auto;
+      align-items: center;
     }
 
-    .setup b {
-      color: #f5f7fb;
+    .setup h1 {
+      grid-column: 1;
+      font-size: clamp(2.4rem, 6.5vw, 3.3rem);
+      line-height: 1.1;
+      margin-bottom: 28px;
+    }
+
+    .steps {
+      grid-column: 1;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    .steps li {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .step-icon {
+      flex: none;
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: var(--accent);
+      background: var(--accent-bg);
+      border: 2px solid var(--accent-border);
+    }
+
+    .step-text {
+      min-width: 0;
+      font-size: clamp(1.4rem, 3.8vw, 1.9rem);
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .step-text small {
+      display: block;
+      margin-top: 4px;
+      color: var(--secondary);
+      font-size: clamp(1.1rem, 2.8vw, 1.4rem);
+      font-weight: 400;
+    }
+
+    .name {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 2px 12px;
+      border-radius: 10px;
+      background: var(--accent-bg);
+      border: 1.5px solid var(--accent-border);
       font-family: ui-monospace, Menlo, monospace;
+      font-size: clamp(1.15rem, 3.2vw, 1.6rem);
+      font-weight: 600;
+      overflow-wrap: anywhere;
     }
 
     .qr {
-      width: 160px;
-      margin: 0;
+      grid-area: 1 / 2 / 3;
+      width: 176px;
+      margin: 0 0 0 32px;
       text-align: center;
     }
 
     .qr img {
       display: block;
-      width: 160px;
-      height: 160px;
-      border-radius: 12px;
+      width: 176px;
+      height: 176px;
+      border-radius: 14px;
     }
 
     .qr figcaption {
-      margin-top: 0.6rem;
-      color: #c6cedc;
-      font-size: 1rem;
+      margin-top: 10px;
+      color: var(--secondary);
+      font-size: 1.1rem;
       line-height: 1.3;
+    }
+
+    .hotspot {
+      max-width: 720px;
+      margin: 26px 0 0;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.14);
+      color: var(--secondary);
+      font-size: 1.15rem;
+      line-height: 1.4;
+      text-align: center;
+    }
+
+    .hotspot b {
+      white-space: nowrap;
+      color: #f5f7fb;
+      font-family: ui-monospace, Menlo, monospace;
     }
   </style>
 </head>
 <body>
-  <main>
-    <div class="text">
-      <h1>Starting Gambit</h1>
-      <p id="status">Starting local services...</p>
-      <div class="bar" aria-hidden="true"></div>
-      <div class="setup" id="setup" hidden>
-        <p>Or, from a phone or laptop:</p>
-        <p>Join the Wi-Fi <b id="setup-ssid"></b><span id="setup-password-line">, password <b id="setup-password"></b></span></p>
-        <p>Then open <b id="setup-address"></b></p>
-      </div>
-    </div>
-    <figure class="qr" id="setup-qr" hidden>
-      <img alt="Setup QR code" onerror="this.parentElement.remove()">
-      <figcaption>Scan with your iPhone to set up this Gambit</figcaption>
-    </figure>
+  <main class="starting" id="starting">
+    <h1>Starting Gambit</h1>
+    <p id="status">Starting up...</p>
+    <div class="bar" aria-hidden="true"></div>
   </main>
+
+  <main class="setup" id="setup" hidden>
+    <div class="setup-steps">
+      <h1 id="setup-heading">Set up your Gambit</h1>
+      <ol class="steps">
+        <li>
+          <span class="step-icon" aria-hidden="true">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>
+          </span>
+          <span class="step-text">Open the Gambit app<small>on your phone</small></span>
+        </li>
+        <li>
+          <span class="step-icon" aria-hidden="true">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></svg>
+          </span>
+          <span class="step-text">Choose this Gambit<br><span class="name" id="setup-name"></span></span>
+        </li>
+      </ol>
+      <figure class="qr" id="setup-qr" hidden>
+        <img alt="Setup QR code" onerror="this.parentElement.remove()">
+        <figcaption>Or scan with your iPhone camera</figcaption>
+      </figure>
+    </div>
+    <p class="hotspot" id="hotspot" hidden>
+      No Bluetooth? Join the Wi-Fi <b id="hotspot-ssid"></b><span id="hotspot-password-line"> (password <b id="hotspot-password"></b>)</span>, then open <b id="hotspot-address"></b>.
+    </p>
+  </main>
+
   <script>
     const target = new URLSearchParams(window.location.search).get("target") || "http://127.0.0.1:8765/kiosk/help";
+    const starting = document.getElementById("starting");
     const status = document.getElementById("status");
     const setup = document.getElementById("setup");
-
+    const hotspot = document.getElementById("hotspot");
     const qr = document.getElementById("setup-qr");
-    let qrOn = false; // core's "setup": {"show_qr_code": true}, off by default
 
-    // The setup QR code (GMBT-1470) shows while the device is in setup mode,
-    // when the app can reach it over Bluetooth as gambit-setup-<id>.
-    function showSetup(network) {
-      setup.hidden = !network;
-      qr.hidden = !network || !qrOn;
-      if (!network) return;
-      if (qrOn) qr.querySelector("img").src ||= "/setup-qr.svg";
-      document.getElementById("setup-ssid").textContent = network.ssid;
-      document.getElementById("setup-password").textContent = network.password;
-      document.getElementById("setup-password-line").hidden = !network.password;
-      document.getElementById("setup-address").textContent = network.address;
+    // What the cook is asked to do while viam-agent waits for setup: "setup"
+    // when the box has no credentials, "wifi" when it has them but fell back
+    // to setup mode because it couldn't get on Wi-Fi.
+    const headings = {
+      setup: "Set up your Gambit",
+      wifi: "Gambit needs Wi-Fi",
+    };
+
+    function show(state) {
+      const waiting = headings[state.waiting];
+      starting.hidden = Boolean(waiting);
+      setup.hidden = !waiting;
+      if (!waiting) {
+        status.textContent = state.message || "Starting up...";
+        return;
+      }
+      document.getElementById("setup-heading").textContent = waiting;
+      const name = document.getElementById("setup-name");
+      name.textContent = state.name || "";
+      name.hidden = !state.name;
+      // Only when core's "setup": {"show_qr_code": true} turns it on.
+      qr.hidden = !state.qr;
+      if (state.qr) qr.querySelector("img").src ||= "/setup-qr.svg";
+      const spot = state.hotspot;
+      hotspot.hidden = !spot;
+      if (!spot) return;
+      document.getElementById("hotspot-ssid").textContent = spot.ssid;
+      document.getElementById("hotspot-password").textContent = spot.password;
+      document.getElementById("hotspot-password-line").hidden = !spot.password;
+      document.getElementById("hotspot-address").textContent = spot.address;
     }
 
     async function checkReady() {
       try {
         const response = await fetch(`/state?target=${encodeURIComponent(target)}`, { cache: "no-store" });
         const state = await response.json();
-        status.textContent = state.message || "Starting Gambit services...";
-        qrOn = Boolean(state.qr);
-        showSetup(state.setup);
+        show(state);
         if (state.ready) {
           window.location.replace(target);
           return;
         }
       } catch (_) {
-        status.textContent = "Starting Gambit services...";
+        show({});
       }
       window.setTimeout(checkReady, 2000);
     }
