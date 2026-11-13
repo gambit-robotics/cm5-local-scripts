@@ -73,7 +73,11 @@ should use short-lived signed URLs.
   `/usr/local/share/gambit`
 - Plymouth assets/theme files
 - `/etc/viam-defaults.json` for Viam BLE provisioning in the User Testing
-  location; the image must not contain per-device `/etc/viam.json`
+  location; the image must not contain per-device `/etc/viam.json`. At every
+  boot, before viam-agent, `gambit-setup-name` sets its `hotspot_ssid` to
+  `gambit-setup-<id>`, `<id>` being the first 8 hex digits of sha256 of the
+  CPU serial, so the setup hotspot and Bluetooth device name the unit by its
+  serial rather than its hostname
 - image metadata at `/etc/gambit/image-build.json`
 
 ## R2 Release Contents
