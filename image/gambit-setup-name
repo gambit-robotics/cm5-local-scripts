@@ -5,10 +5,16 @@
 # first 8 hex digits of sha256(CPU serial): the serial is burned into the
 # chip, and the setup QR code carries the same <id>. It runs at every boot,
 # before viam-agent, and leaves the hostname alone.
+#
+# GMBT-1533: a unit set up by script may have no /etc/viam-defaults.json, so
+# this makes one. An agent that ran before this unit was named starts from its
+# config cache (cmd/viam-agent/main.go, v1.2.1), which holds the hostname name
+# it worked out then; the cache gets the same name.
 set -eu
 
 ROOT="${GAMBIT_ROOT:-}" # a fake root, in tests
 defaults="$ROOT/etc/viam-defaults.json"
+cache="$ROOT/opt/viam/cache/config_cache.json"
 
 serial="$(tr -d '\000\n' 2>/dev/null < "$ROOT/proc/device-tree/serial-number" | tr 'A-F' 'a-f' || true)"
 case "$serial" in
@@ -18,9 +24,21 @@ case "$serial" in
         ;;
 esac
 
-id="$(printf '%s' "$serial" | sha256sum | cut -c1-8)"
-named="$(jq --arg ssid "gambit-setup-$id" '.network_configuration.hotspot_ssid = $ssid' "$defaults")"
-if [ "$named" != "$(jq . "$defaults")" ]; then
-    printf '%s\n' "$named" > "$defaults.tmp"
-    mv "$defaults.tmp" "$defaults"
+ssid="gambit-setup-$(printf '%s' "$serial" | sha256sum | cut -c1-8)"
+
+# Sets network_configuration.hotspot_ssid in $1, rewriting it only when that
+# changes it, and keeping its owner and mode.
+name() {
+    named="$(jq --arg ssid "$ssid" '.network_configuration.hotspot_ssid = $ssid' "$1")"
+    if [ "$named" != "$(jq . "$1")" ]; then
+        cp -p "$1" "$1.tmp"
+        printf '%s\n' "$named" > "$1.tmp"
+        mv "$1.tmp" "$1"
+    fi
+}
+
+[ -f "$defaults" ] || printf '{}\n' > "$defaults"
+name "$defaults"
+if [ -f "$cache" ]; then
+    name "$cache"
 fi

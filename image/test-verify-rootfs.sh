@@ -407,6 +407,28 @@ if [[ "$(ls -li "$unit/etc/viam-defaults.json")" != "$before" ]]; then
     exit 1
 fi
 
+# A unit set up by script (GMBT-1533) has no viam-defaults.json, and its agent
+# was provisioned before it was named, so it starts from a cache that holds
+# the hostname name.
+rm "$unit/etc/viam-defaults.json"
+mkdir -p "$unit/opt/viam/cache"
+printf '%s\n' '{"network_configuration":{"hotspot_prefix":"gambit-setup","hotspot_ssid":"gambit-setup-user-research-12","hotspot_password":"gambitsetup"},"additional_networks":{"home":{"psk":"secret"}}}' \
+    > "$unit/opt/viam/cache/config_cache.json"
+chmod 0600 "$unit/opt/viam/cache/config_cache.json"
+setup_name
+if [[ "$(jq -c . "$unit/etc/viam-defaults.json")" != '{"network_configuration":{"hotspot_ssid":"gambit-setup-6c22e875"}}' ]]; then
+    echo "expected a unit without viam-defaults.json to get one with its setup name" >&2
+    exit 1
+fi
+if [[ "$(jq -c . "$unit/opt/viam/cache/config_cache.json")" != '{"network_configuration":{"hotspot_prefix":"gambit-setup","hotspot_ssid":"gambit-setup-6c22e875","hotspot_password":"gambitsetup"},"additional_networks":{"home":{"psk":"secret"}}}' ]]; then
+    echo "expected the agent's cache to get the setup name and keep the rest" >&2
+    exit 1
+fi
+if [[ "$(stat -c %a "$unit/opt/viam/cache/config_cache.json" 2>/dev/null || stat -f %Lp "$unit/opt/viam/cache/config_cache.json")" != 600 ]]; then
+    echo "expected the agent's cache to stay 0600" >&2
+    exit 1
+fi
+
 rm "$unit/proc/device-tree/serial-number"
 cp "$SCRIPT_DIR/viam-defaults.user-testing.json" "$unit/etc/viam-defaults.json"
 setup_name

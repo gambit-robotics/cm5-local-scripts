@@ -26,7 +26,7 @@ echo "Installing dependencies..."
 if [[ "${SKIP_APT_UPDATE:-}" != "1" ]]; then
     apt-get update -qq
 fi
-apt-get install -y -qq chromium curl python3 qrencode wlrctl >/dev/null
+apt-get install -y -qq chromium curl jq python3 qrencode wlrctl >/dev/null
 
 # Step 2: Create invisible cursor theme for touchscreen kiosk
 echo "Creating invisible cursor theme..."
@@ -121,6 +121,15 @@ install -m 0644 "$REPO_DIR/image/gambit-setup-options.service" /etc/systemd/syst
 systemctl daemon-reload
 systemctl enable gambit-setup-options.service
 /usr/local/sbin/gambit-setup-options
+
+# The setup name the splash shows, gambit-setup-<id> from the CPU serial, as
+# image-built units have it (GMBT-1471): at every boot before viam-agent, and
+# now.
+install -m 0755 "$REPO_DIR/image/gambit-setup-name" /usr/local/sbin/gambit-setup-name
+install -m 0644 "$REPO_DIR/image/gambit-setup-name.service" /etc/systemd/system/gambit-setup-name.service
+systemctl daemon-reload
+systemctl enable gambit-setup-name.service
+/usr/local/sbin/gambit-setup-name
 
 cat > "$KIOSK_SCRIPT" << 'KIOSK_EOF'
 #!/bin/bash
