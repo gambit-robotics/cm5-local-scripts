@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Tests the setup hotspot the kiosk splash tells a cook to join."""
+"""Tests what the kiosk splash shows before Chef is up, and the setup name it
+shows: the one gambit-setup-name gives viam-agent."""
 import importlib.machinery
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -19,68 +21,50 @@ server = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.
 loader.exec_module(server)
 
 HOTSPOT_UP = "3: wlan0    inet 10.42.0.1/24 brd 10.42.0.255 scope global noprefixroute wlan0\n"
+# UR-12's serial, as /proc/device-tree/serial-number holds it.
+UR12_SERIAL = b"1F5762CBE17D0CA4\0"
 
 
-class SetupNetworkTest(unittest.TestCase):
+class SetupNameTest(unittest.TestCase):
+    """A unit's fake root with the image's viam-defaults.json."""
+
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.defaults = os.path.join(tmp.name, "viam-defaults.json")
-        self.cache = os.path.join(tmp.name, "config_cache.json")
-        for name, path in (("VIAM_DEFAULTS", self.defaults), ("AGENT_CONFIG_CACHE", self.cache)):
-            patcher = mock.patch.object(server, name, path)
-            patcher.start()
-            self.addCleanup(patcher.stop)
-
-    def write(self, path: str, conf: dict) -> None:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump({"network_configuration": conf}, f)
-
-    def test_a_new_device_names_the_images_hotspot(self) -> None:
-        self.write(self.defaults, {"hotspot_prefix": "gambit-setup", "hotspot_password": "gambitsetup"})
-        self.assertEqual(
-            server.setup_network("User-Research-12"),
-            {"ssid": "gambit-setup-user-research-12", "password": "gambitsetup", "address": "10.42.0.1"},
-        )
-
-    def test_the_config_the_agent_cached_wins(self) -> None:
-        self.write(self.defaults, {"hotspot_prefix": "gambit-setup", "hotspot_password": "gambitsetup"})
-        self.write(self.cache, {"hotspot_ssid": "kitchen-setup", "hotspot_password": "from-the-cloud"})
-        network = server.setup_network("ur-12")
-        self.assertEqual((network["ssid"], network["password"]), ("kitchen-setup", "from-the-cloud"))
-
-    def test_without_config_it_names_the_agents_defaults(self) -> None:
-        network = server.setup_network("ur-12")
-        self.assertEqual((network["ssid"], network["password"]), ("viam-setup-ur-12", "viamsetup"))
-
-    def test_the_name_fits_in_a_wifi_name(self) -> None:
-        self.assertEqual(len(server.setup_network("a-very-long-kitchen-device-hostname")["ssid"]), 32)
-
-    def test_the_splash_shows_the_steps_only_while_the_hotspot_is_up(self) -> None:
-        self.write(self.defaults, {"hotspot_prefix": "gambit-setup", "hotspot_password": "gambitsetup"})
-        unreachable = "http://127.0.0.1:9/"
-        with mock.patch.object(server.os.path, "exists", return_value=False):
-            with mock.patch.object(server, "command_output", return_value=HOTSPOT_UP):
-                self.assertEqual(server.provisioning_state(unreachable)["setup"]["password"], "gambitsetup")
-            with mock.patch.object(server, "command_output", return_value=""):
-                self.assertNotIn("setup", server.provisioning_state(unreachable))
-
-
-class SetupQRTest(unittest.TestCase):
-    def serial(self, content: bytes) -> str:
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        path = os.path.join(tmp.name, "serial-number")
-        with open(path, "wb") as f:
-            f.write(content)
-        patcher = mock.patch.object(server, "CPU_SERIAL", path)
+        self.root = tmp.name
+        os.makedirs(os.path.join(self.root, "etc"))
+        defaults = os.path.join(self.root, "etc", "viam-defaults.json")
+        shutil.copy(os.path.join(HERE, "viam-defaults.user-testing.json"), defaults)
+        patcher = mock.patch.object(server, "VIAM_DEFAULTS", defaults)
         patcher.start()
         self.addCleanup(patcher.stop)
-        return path
 
-    def test_the_code_names_the_box_by_its_setup_id(self) -> None:
-        # UR-12's serial; sha256 of it starts 6c22e875, as gambit-setup-name has it.
-        self.serial(b"1F5762CBE17D0CA4\0")
+    def boot(self, serial: bytes) -> None:
+        """What gambit-setup-name does at boot, before viam-agent starts."""
+        os.makedirs(os.path.join(self.root, "proc", "device-tree"))
+        with open(os.path.join(self.root, "proc", "device-tree", "serial-number"), "wb") as f:
+            f.write(serial)
+        subprocess.run(
+            [os.path.join(HERE, "gambit-setup-name")],
+            check=True,
+            capture_output=True,
+            env={**os.environ, "GAMBIT_ROOT": self.root},
+        )
+
+    def test_the_splash_shows_the_name_gambit_setup_name_gave_the_agent(self) -> None:
+        self.boot(UR12_SERIAL)
+        self.assertEqual(
+            server.setup_network(),
+            {"ssid": "gambit-setup-6c22e875", "password": "gambitsetup", "address": "10.42.0.1"},
+        )
+
+    def test_without_a_setup_name_it_shows_none_never_the_hostname(self) -> None:
+        self.boot(b"")
+        self.assertEqual(server.setup_network()["ssid"], "")
+        self.assertNotIn("name", server.waiting_for_setup("setup", hotspot=True))
+
+    def test_the_qr_code_carries_the_setup_id(self) -> None:
+        self.boot(UR12_SERIAL)
         drawn = mock.Mock(stdout=b"<svg/>")
         with mock.patch.object(server.subprocess, "run", return_value=drawn) as run:
             self.assertEqual(server.setup_qr(), b"<svg/>")
@@ -89,11 +73,118 @@ class SetupQRTest(unittest.TestCase):
             "https://gambit-setup.chef-workspace.workers.dev/setup?device=6c22e875",
         )
 
-    def test_without_a_serial_there_is_no_code(self) -> None:
-        os.remove(self.serial(b""))
+    def test_without_a_setup_name_there_is_no_code(self) -> None:
         with mock.patch.object(server.subprocess, "run") as run:
             self.assertEqual(server.setup_qr(), b"")
         run.assert_not_called()
+
+    def test_the_hotspot_is_up_while_the_box_holds_its_address(self) -> None:
+        with mock.patch.object(server, "command_output", return_value=HOTSPOT_UP):
+            self.assertTrue(server.hotspot_up())
+        with mock.patch.object(server, "command_output", return_value=""):
+            self.assertFalse(server.hotspot_up())
+
+
+class StateTest(unittest.TestCase):
+    """What the splash shows before it hands the screen to Chef."""
+
+    def setUp(self) -> None:
+        network = {"ssid": "gambit-setup-6c22e875", "password": "gambitsetup", "address": "10.42.0.1"}
+        self.box(setup_network=lambda: network, setup_qr_on=lambda: False)
+        self.box(viam_agent_logs=lambda: "", package_count=lambda: 0)
+        self.agent, self.credentials, self.hotspot, self.online = True, False, False, False
+        self.saved, self.chef = False, False
+        self.box(
+            target_ready=lambda _: self.chef,
+            viam_agent_active=lambda: self.agent,
+            hotspot_up=lambda: self.hotspot,
+            network_online=lambda: self.online,
+            wifi_saved=lambda: self.saved,
+        )
+        patcher = mock.patch.object(server.os.path, "exists", side_effect=lambda path: self.credentials)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def box(self, **attrs: object) -> None:
+        for name, value in attrs.items():
+            patcher = mock.patch.object(server, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def state(self) -> dict:
+        return server.provisioning_state("http://127.0.0.1:9/")
+
+    def test_a_box_without_credentials_asks_to_be_set_up_by_its_setup_name(self) -> None:
+        self.assertEqual(self.state(), {"ready": False, "waiting": "setup", "name": "gambit-setup-6c22e875"})
+
+    def test_the_hotspot_shows_only_while_it_is_up(self) -> None:
+        self.hotspot = True
+        self.assertEqual(
+            self.state()["hotspot"],
+            {"ssid": "gambit-setup-6c22e875", "password": "gambitsetup", "address": "10.42.0.1"},
+        )
+
+    def test_a_box_back_in_setup_mode_with_credentials_asks_for_wifi(self) -> None:
+        self.credentials = self.hotspot = True
+        self.assertEqual(self.state()["waiting"], "wifi")
+
+    def test_before_the_agent_runs_it_is_starting(self) -> None:
+        self.agent = False
+        self.assertEqual(self.state(), {"ready": False, "message": "Starting up..."})
+
+    def test_after_the_app_sends_wifi_it_is_connecting_not_waiting(self) -> None:
+        self.credentials = self.saved = True
+        self.assertEqual(self.state(), {"ready": False, "message": "Connecting to Wi-Fi..."})
+
+    def test_once_online_it_is_configuring(self) -> None:
+        self.credentials = self.saved = self.online = True
+        self.assertEqual(self.state(), {"ready": False, "message": "Configuring. This can take a few minutes."})
+
+    def test_once_online_with_chef_up_it_hands_over(self) -> None:
+        self.credentials = self.saved = self.online = self.chef = True
+        self.assertEqual(self.state(), {"ready": True, "message": "Opening Gambit..."})
+
+    # GMBT-1624: a factory reset keeps /etc/viam.json and forgets the Wi-Fi.
+
+    def test_after_a_reset_it_asks_for_wifi_even_with_chef_up(self) -> None:
+        self.credentials = self.hotspot = self.chef = True
+        self.assertEqual(self.state()["waiting"], "wifi")
+
+    def test_after_a_reset_it_asks_for_wifi_before_the_hotspot_is_up(self) -> None:
+        self.credentials = self.chef = True  # Bluetooth only, the first 15-45 s
+        self.assertEqual(self.state(), {"ready": False, "waiting": "wifi", "name": "gambit-setup-6c22e875"})
+
+    def test_once_the_app_saves_wifi_it_hands_over_to_chef(self) -> None:
+        self.credentials = self.saved = self.chef = True
+        self.assertTrue(self.state()["ready"])
+
+    def test_a_box_online_without_wifi_hands_over(self) -> None:
+        self.credentials = self.online = self.chef = True  # on Ethernet
+        self.assertTrue(self.state()["ready"])
+
+
+class WifiSavedTest(unittest.TestCase):
+    """Saved Wi-Fi, from NetworkManager's profiles, as the kiosk user reads them."""
+
+    def nmcli(self, profiles: dict[str, tuple[str, str]]) -> bool:
+        def run(args: list[str], timeout: float = 1.0) -> str:
+            if args[:3] == ["nmcli", "-t", "-f"]:
+                return "".join(f"{uuid}:{kind}\n" for uuid, (kind, _) in profiles.items())
+            if args[:3] == ["nmcli", "-g", "802-11-wireless.mode"]:
+                return profiles[args[-1]][1] + "\n"
+            raise AssertionError(args)
+
+        with mock.patch.object(server, "command_output", side_effect=run):
+            return server.wifi_saved()
+
+    def test_none_after_a_reset(self) -> None:
+        self.assertFalse(self.nmcli({}))
+
+    def test_the_agents_hotspot_is_not_a_saved_network(self) -> None:
+        self.assertFalse(self.nmcli({"a1": ("802-11-wireless", "ap"), "e1": ("802-3-ethernet", "")}))
+
+    def test_a_home_network_is(self) -> None:
+        self.assertTrue(self.nmcli({"a1": ("802-11-wireless", "ap"), "w1": ("802-11-wireless", "infrastructure")}))
 
 
 class SetupQRFlagTest(unittest.TestCase):
@@ -107,7 +198,8 @@ class SetupQRFlagTest(unittest.TestCase):
         self.root = tmp.name
         os.makedirs(os.path.join(self.root, "root/.viam"))
         self.options = os.path.join(self.root, "run/gambit/setup.json")
-        for name, value in (("SETUP_OPTIONS", self.options), ("hotspot_up", lambda: True), ("setup_qr", lambda: b"<svg/>")):
+        network = {"ssid": "gambit-setup-6c22e875", "password": "gambitsetup", "address": "10.42.0.1"}
+        for name, value in (("SETUP_OPTIONS", self.options), ("setup_network", lambda: network), ("setup_qr", lambda: b"<svg/>")):
             patcher = mock.patch.object(server, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -153,7 +245,7 @@ class SetupQRFlagTest(unittest.TestCase):
             httpd.server_close()
 
     def assert_qr(self, on: bool) -> None:
-        self.assertEqual(server.with_setup({}).get("qr", False), on)
+        self.assertEqual(server.waiting_for_setup("setup", hotspot=True).get("qr", False), on)
         self.assertEqual(self.served(), 200 if on else 404)
 
     def test_a_box_never_set_up_has_no_cache_and_no_code(self) -> None:

@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 import argparse
-import hashlib
 import json
 import os
-import socket
 import subprocess
 import urllib.error
 import urllib.request
@@ -41,6 +39,19 @@ def network_online() -> bool:
     return bool(command_output(["ip", "route", "show", "default"]).strip())
 
 
+def wifi_saved() -> bool:
+    """A Wi-Fi network is saved for the box to join: any NetworkManager Wi-Fi
+    profile but viam-agent's own setup hotspot, the one in mode ap."""
+    for line in command_output(["nmcli", "-t", "-f", "UUID,TYPE", "connection", "show"]).splitlines():
+        uuid, _, kind = line.partition(":")
+        if kind != "802-11-wireless":
+            continue
+        mode = command_output(["nmcli", "-g", "802-11-wireless.mode", "connection", "show", uuid]).strip()
+        if mode != "ap":
+            return True
+    return False
+
+
 def viam_agent_logs() -> str:
     return command_output(
         ["journalctl", "-u", "viam-agent.service", "-n", "120", "--no-pager"],
@@ -56,62 +67,48 @@ def package_count() -> int:
         return 0
 
 
-AGENT_CONFIG_CACHE = "/opt/viam/cache/config_cache.json"
+# gambit-setup-name (GMBT-1471) names the box's setup hotspot and Bluetooth
+# device here, gambit-setup-<id> after its CPU serial, before viam-agent starts
+# and reads this same file. The splash shows that name and never works out one
+# of its own, so the screen and the app's Bluetooth list can't disagree.
 VIAM_DEFAULTS = "/etc/viam-defaults.json"
+SETUP_PREFIX = "gambit-setup-"
 # viam-agent serves its setup page on its hotspot, at an address it hard-codes.
 SETUP_ADDRESS = "10.42.0.1"
-
-
-def network_configuration(path: str) -> dict[str, object]:
-    try:
-        with open(path, encoding="utf-8") as f:
-            conf = json.load(f).get("network_configuration")
-    except (OSError, ValueError, AttributeError):
-        return {}
-    return conf if isinstance(conf, dict) else {}
-
-
-def setup_network(hostname: str) -> dict[str, str]:
-    """The setup hotspot viam-agent opens, worked out the way the agent does:
-    its own defaults, then the image's /etc/viam-defaults.json, then the
-    config it cached from the cloud."""
-    conf: dict[str, object] = {"hotspot_prefix": "viam-setup", "hotspot_password": "viamsetup"}
-    for path in (VIAM_DEFAULTS, AGENT_CONFIG_CACHE):
-        conf.update({key: value for key, value in network_configuration(path).items() if value})
-    ssid = str(conf.get("hotspot_ssid") or f"{conf['hotspot_prefix']}-{hostname.lower()}")
-    return {"ssid": ssid[:32], "password": str(conf["hotspot_password"]), "address": SETUP_ADDRESS}
-
-
-# The CPU serial, burned into the chip, identifies the box. Its setup hotspot
-# and Bluetooth device are gambit-setup-<id>, <id> being the first 8 hex digits
-# of sha256(serial) (GMBT-1471).
-CPU_SERIAL = "/proc/device-tree/serial-number"
 # Where the setup QR code points (GMBT-1470, chef's infra/setup): the Gambit
 # app opens it at Bluetooth pairing with gambit-setup-<id> chosen, and a phone
 # without the app gets TestFlight.
 SETUP_LINK = "https://gambit-setup.chef-workspace.workers.dev/setup?device="
 
 
-def setup_qr() -> bytes:
-    """This box's setup QR code, as SVG; empty without a serial or qrencode."""
+def setup_network() -> dict[str, str]:
+    """The setup name (hotspot and Bluetooth) and hotspot password; the name is
+    empty when /etc/viam-defaults.json gives none."""
     try:
-        with open(CPU_SERIAL, "rb") as f:
-            serial = f.read().rstrip(b"\0\n").lower()
-        if not serial:
-            return b""
-        device = hashlib.sha256(serial).hexdigest()[:8]
+        with open(VIAM_DEFAULTS, encoding="utf-8") as f:
+            conf = json.load(f)["network_configuration"]
+        ssid, password = conf.get("hotspot_ssid"), conf.get("hotspot_password")
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        ssid = password = None
+    # viamsetup is the agent's own password when the file sets none.
+    return {"ssid": str(ssid or ""), "password": str(password or "viamsetup"), "address": SETUP_ADDRESS}
+
+
+def setup_qr() -> bytes:
+    """This box's setup QR code, as SVG; empty without a gambit-setup-<id> name
+    or qrencode."""
+    ssid = setup_network()["ssid"]
+    if not ssid.startswith(SETUP_PREFIX):
+        return b""
+    try:
         return subprocess.run(
-            ["qrencode", "-t", "SVG", "-l", "M", "-o", "-", SETUP_LINK + device],
+            ["qrencode", "-t", "SVG", "-l", "M", "-o", "-", SETUP_LINK + ssid[len(SETUP_PREFIX):]],
             check=True,
             capture_output=True,
             timeout=2,
         ).stdout
     except (OSError, subprocess.SubprocessError):
         return b""
-
-
-def hotspot_up() -> bool:
-    return f"inet {SETUP_ADDRESS}/" in command_output(["ip", "-4", "-o", "addr", "show"])
 
 
 # The setup QR code stays off until its TestFlight path can be tested (Jacob,
@@ -129,33 +126,50 @@ def setup_qr_on() -> bool:
         return False
 
 
-def with_setup(state: dict[str, object]) -> dict[str, object]:
-    """Adds how to set the device up from a phone, while the hotspot is up."""
-    if hotspot_up():
-        state["setup"] = setup_network(socket.gethostname())
+def hotspot_up() -> bool:
+    return f"inet {SETUP_ADDRESS}/" in command_output(["ip", "-4", "-o", "addr", "show"])
+
+
+def waiting_for_setup(waiting: str, hotspot: bool) -> dict[str, object]:
+    """viam-agent is in setup mode, waiting for someone with the Gambit app:
+    "setup" when the box has no credentials, "wifi" when it has them but
+    couldn't get on Wi-Fi. The app lists the box over Bluetooth by its setup
+    name, so the name shows in both; the hotspot only while it's up."""
+    network = setup_network()
+    state: dict[str, object] = {"ready": False, "waiting": waiting}
+    if network["ssid"]:
+        state["name"] = network["ssid"]
+        if hotspot:
+            state["hotspot"] = network
         if setup_qr_on():
             state["qr"] = True
     return state
 
 
 def provisioning_state(target: str) -> dict[str, object]:
-    if target_ready(target):
+    # A box with no Wi-Fi saved, and no other way online, waits for someone to
+    # give it Wi-Fi. That holds even when Chef answers: a factory reset keeps
+    # /etc/viam.json and forgets only the Wi-Fi (GMBT-1624), so Chef starts
+    # offline from its cached config. The page leaves for Chef only when this
+    # says ready.
+    needs_wifi = not wifi_saved() and not network_online()
+    if not needs_wifi and target_ready(target):
         return {"ready": True, "message": "Opening Gambit..."}
 
-    if not os.path.exists("/etc/viam.json"):
-        return with_setup({
-            "ready": False,
-            "message": "Open the Gambit app and connect with Bluetooth to finish setup.",
-        })
-
     if not viam_agent_active():
-        return {"ready": False, "message": "Starting Viam services..."}
+        return {"ready": False, "message": "Starting up..."}
+
+    # The agent advertises over Bluetooth as soon as it starts without
+    # /etc/viam.json, or with it and no Wi-Fi, and opens its hotspot soon
+    # after. With credentials and a saved network, the hotspot means the agent
+    # went back to setup mode because it couldn't join that network.
+    configured = os.path.exists("/etc/viam.json")
+    hotspot = hotspot_up()
+    if not configured or hotspot or needs_wifi:
+        return waiting_for_setup("wifi" if configured else "setup", hotspot)
 
     if not network_online():
-        return with_setup({
-            "ready": False,
-            "message": "Waiting for Wi-Fi. Finish network setup in the Gambit app.",
-        })
+        return {"ready": False, "message": "Connecting to Wi-Fi..."}
 
     logs = viam_agent_logs()
     installing = (
@@ -168,12 +182,12 @@ def provisioning_state(target: str) -> dict[str, object]:
     if installing or package_count() > 0:
         return {
             "ready": False,
-            "message": "Configuring your robot. Downloading modules and dependencies...",
+            "message": "Configuring. Downloading software...",
         }
 
     return {
         "ready": False,
-        "message": "Configuring your robot. This can take a few minutes after Wi-Fi setup.",
+        "message": "Configuring. This can take a few minutes.",
     }
 
 
