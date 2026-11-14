@@ -1,0 +1,11 @@
+[Unit]
+Description=Gambit: name the setup hotspot and Bluetooth device after the CPU serial
+Before=viam-agent.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gambit-setup-name
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

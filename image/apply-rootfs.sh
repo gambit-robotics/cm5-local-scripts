@@ -820,19 +820,7 @@ install_file 0644 "$VIAM_DEFAULTS" "$ROOTFS/etc/viam-defaults.json"
 # Each unit's setup hotspot and Bluetooth device are named after its CPU
 # serial, not its hostname, before viam-agent starts (GMBT-1471).
 install_file 0755 "$SCRIPT_DIR/gambit-setup-name" "$ROOTFS/usr/local/sbin/gambit-setup-name"
-write_file 0644 "$ROOTFS/etc/systemd/system/gambit-setup-name.service" <<'EOF'
-[Unit]
-Description=Gambit: name the setup hotspot and Bluetooth device after the CPU serial
-Before=viam-agent.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/sbin/gambit-setup-name
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
+install_file 0644 "$SCRIPT_DIR/gambit-setup-name.service" "$ROOTFS/etc/systemd/system/gambit-setup-name.service"
 enable_system_unit gambit-setup-name.service
 
 write_file 0644 "$ROOTFS/etc/gambit/image-build.json" <<EOF
