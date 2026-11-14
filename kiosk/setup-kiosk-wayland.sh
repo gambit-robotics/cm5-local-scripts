@@ -103,9 +103,12 @@ apt-get install -y -qq swaybg >/dev/null
 if [[ -f /etc/xdg/labwc/autostart ]] && [[ ! -f /etc/xdg/labwc/autostart.bak ]]; then
     cp /etc/xdg/labwc/autostart /etc/xdg/labwc/autostart.bak
 fi
+# The panel is mounted upside down, and the accelerometer module that rotates
+# the screen only runs once the box is online: rotate at boot, as the image does.
 cat > /etc/xdg/labwc/autostart << 'BGEOF'
 swaybg -c '#1a1d23' &
 /usr/bin/kanshi &
+/bin/sh -c 'sleep 2; wlr-randr --output DSI-2 --transform 180' &
 BGEOF
 
 # Step 4: Create start-kiosk.sh
